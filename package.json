@@ -1,0 +1,34 @@
+{
+    "name":                 "shatter",
+    "version":              "9.9.9",
+    "description":
+
+        "A error-first callback work queue that splits work on a hashed key.",
+
+    "keywords":
+    [
+                            "queue", "events", "callback", "control", "flow",
+                            "cadence"
+    ],
+    "author":               "Alan Gutierrez <alan@prettyrobots.com>",
+    "homepage":             "https://github.com/bigeasy/shatter",
+    "bugs":                 "https://github.com/bigeasy/shatter/issues",
+    "license":              "MIT",
+    "repository":
+    {
+                            "type": "git",
+                            "url": "http://github.com/bigeasy/shatter.git"
+    },
+    "dependencies":
+    {
+    },
+    "devDependencies":
+    {
+                            "proof":                        "1.2.x"
+    },
+    "main":                 "shatter",
+    "scripts":
+    {
+                            "test": "proof platform win32 && proof test */*.t.js || t/test"
+    }
+}
