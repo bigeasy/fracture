@@ -1,6 +1,6 @@
 {
     "name":                 "shatter",
-    "version":              "9.9.9",
+    "version":              "0.0.0",
     "description":
 
         "A error-first callback work queue that splits work on a hashed key.",
