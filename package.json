@@ -1,5 +1,5 @@
 {
-    "name":                 "shatter",
+    "name":                 "fracture",
     "version":              "0.0.1",
     "description":
 
@@ -11,13 +11,13 @@
                             "cadence"
     ],
     "author":               "Alan Gutierrez <alan@prettyrobots.com>",
-    "homepage":             "https://github.com/bigeasy/shatter",
-    "bugs":                 "https://github.com/bigeasy/shatter/issues",
+    "homepage":             "https://github.com/bigeasy/fracture",
+    "bugs":                 "https://github.com/bigeasy/fracture/issues",
     "license":              "MIT",
     "repository":
     {
                             "type": "git",
-                            "url": "http://github.com/bigeasy/shatter.git"
+                            "url": "http://github.com/bigeasy/fracture.git"
     },
     "dependencies":
     {
@@ -26,7 +26,7 @@
     {
                             "proof":                        "1.2.x"
     },
-    "main":                 "shatter",
+    "main":                 "fracture",
     "scripts":
     {
                             "test": "proof platform win32 && proof test */*.t.js || t/test"
