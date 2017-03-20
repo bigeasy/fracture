@@ -3,7 +3,7 @@
     "version":              "0.0.2",
     "description":
 
-        "A error-first callback work queue that splits work on a hashed key.",
+      "A error-first callback work queue that splits work on a hashed key.",
 
     "keywords":
     [
@@ -21,6 +21,12 @@
     },
     "dependencies":
     {
+                            "abend":                        "1.0.x",
+                            "cadence":                      "1.0.x",
+                            "extant":                       "0.0.1",
+                            "hash.fnv":                     "1.0.x",
+                            "operation":                    "1.2.x",
+                            "turnstile":                    "2.2.9"
     },
     "devDependencies":
     {
