@@ -58,7 +58,7 @@ Fracture.prototype._getBucket = function (envelope) {
     return bucket
 }
 
-// TODO Note that stringify is going to depend on objet properties being in the
+// TODO Note that stringify is going to depend on object properties being in the
 // same order.
 
 //
