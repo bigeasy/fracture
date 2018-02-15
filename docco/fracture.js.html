@@ -35,7 +35,11 @@
 <span class="hljs-keyword">var</span> Turnstile = <span class="hljs-built_in">require</span>(<span class="hljs-string">'turnstile/redux'</span>)
 <span class="hljs-keyword">var</span> fnv = <span class="hljs-built_in">require</span>(<span class="hljs-string">'hash.fnv'</span>)
 <span class="hljs-keyword">var</span> Operation = <span class="hljs-built_in">require</span>(<span class="hljs-string">'operation/variadic'</span>)
-<span class="hljs-keyword">var</span> coalesce = <span class="hljs-built_in">require</span>(<span class="hljs-string">'extant'</span>)</pre></div></div>
+<span class="hljs-keyword">var</span> coalesce = <span class="hljs-built_in">require</span>(<span class="hljs-string">'extant'</span>)
+<span class="hljs-keyword">var</span> Cache = <span class="hljs-built_in">require</span>(<span class="hljs-string">'magazine'</span>)
+<span class="hljs-keyword">var</span> noop = <span class="hljs-built_in">require</span>(<span class="hljs-string">'nop'</span>)
+
+</pre></div></div>
 
         </li>
 
@@ -64,22 +68,28 @@ Cadence. A trampoline is a trampoline. I know it, but I’m not convinced.</p>
 
             </div>
 
-            <div class="content"><div class='highlight'><pre><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Fracture</span> (<span class="hljs-params"></span>) </span>{
-    <span class="hljs-keyword">var</span> vargs = <span class="hljs-built_in">Array</span>.prototype.slice.call(<span class="hljs-built_in">arguments</span>)
-    <span class="hljs-keyword">this</span>._operation = Operation(vargs)
-    <span class="hljs-keyword">var</span> options = vargs.shift()
-    <span class="hljs-keyword">var</span> turnstile = coalesce(options.turnstile, {})
-    <span class="hljs-keyword">this</span>._extractor = options.extractor
-    <span class="hljs-keyword">this</span>._buckets = []
-    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>, I = options.buckets; i &lt; I; i++) {
-        <span class="hljs-keyword">this</span>._buckets.push(<span class="hljs-keyword">new</span> Turnstile(<span class="hljs-keyword">this</span>, <span class="hljs-string">'_operate'</span>, {
-            <span class="hljs-attr">setImmediate</span>: <span class="hljs-literal">false</span>,
-            <span class="hljs-attr">Date</span>: coalesce(turnstile.Date, <span class="hljs-built_in">Date</span>)
-        }))
-    }
-    <span class="hljs-keyword">this</span>.turnstile = <span class="hljs-keyword">new</span> Turnstile(<span class="hljs-keyword">this</span>, <span class="hljs-string">'_fracture'</span>, options.turnstile)
+            <div class="content"><div class='highlight'><pre><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Fracture</span> (<span class="hljs-params">options</span>) </span>{
+    <span class="hljs-keyword">this</span>._Date = coalesce(options.Date, <span class="hljs-built_in">Date</span>)
+    <span class="hljs-keyword">this</span>._buckets = <span class="hljs-keyword">new</span> Cache({ <span class="hljs-attr">Date</span>: <span class="hljs-keyword">this</span>._Date }).createMagazine()
+    <span class="hljs-keyword">var</span> fractured = <span class="hljs-built_in">JSON</span>.parse(<span class="hljs-built_in">JSON</span>.stringify(coalesce(options.fractured, {})))
+    <span class="hljs-keyword">var</span> funnel = <span class="hljs-built_in">JSON</span>.parse(<span class="hljs-built_in">JSON</span>.stringify(coalesce(options.funnel, {})))
+    funnel.Date = fractured.Date = <span class="hljs-keyword">this</span>._Date
+    <span class="hljs-keyword">this</span>.turnstile = <span class="hljs-keyword">new</span> Turnstile(funnel)
+    <span class="hljs-keyword">this</span>._fractured = fractured
     <span class="hljs-keyword">this</span>.health = <span class="hljs-keyword">this</span>.turnstile.health
-}</pre></div></div>
+    <span class="hljs-keyword">if</span> (options.buckets) {
+        <span class="hljs-keyword">var</span> extractor = options.extractor
+        <span class="hljs-keyword">this</span>._extractor = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">work</span>) </span>{
+            <span class="hljs-keyword">var</span> buffer = <span class="hljs-keyword">new</span> Buffer(<span class="hljs-built_in">String</span>(extractor(work)))
+            <span class="hljs-keyword">return</span> fnv(<span class="hljs-number">0</span>, buffer, <span class="hljs-number">0</span>, buffer.length)
+        }
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">this</span>._extractor = options.extractor
+    }
+    <span class="hljs-keyword">this</span>._$fracture = <span class="hljs-keyword">new</span> Operation([ <span class="hljs-keyword">this</span>, <span class="hljs-string">'_fracture'</span> ])
+}
+
+</pre></div></div>
 
         </li>
 
@@ -90,8 +100,8 @@ Cadence. A trampoline is a trampoline. I know it, but I’m not convinced.</p>
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-4">&#182;</a>
               </div>
-              <p>TODO Note that stringify is going to depend on objet properties being in the
-same order.</p>
+              <p>Get a bucket or create one if it doesn’t exist. Take this opportunity to
+deallocate any buckets that are not in use.</p>
 
             </div>
 
@@ -107,35 +117,117 @@ same order.</p>
 
             </div>
 
-            <div class="content"><div class='highlight'><pre>Fracture.prototype._fracture = cadence(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">async, envelope</span>) </span>{
-    <span class="hljs-keyword">var</span> buffer = <span class="hljs-keyword">new</span> Buffer(<span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-keyword">this</span>._extractor.call(<span class="hljs-literal">null</span>, envelope.body.work)))
-    <span class="hljs-keyword">var</span> index = fnv(<span class="hljs-number">0</span>, buffer, <span class="hljs-number">0</span>, buffer.length) % <span class="hljs-keyword">this</span>._buckets.length
-    <span class="hljs-keyword">this</span>._buckets[index].enqueue(envelope.body.work, envelope.body.completed)
-})
+            <div class="content"><div class='highlight'><pre>Fracture.prototype._getBucket = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">envelope</span>) </span>{
+</pre></div></div>
 
-Fracture.prototype._operate = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">envelope, callback</span>) </span>{
-    <span class="hljs-keyword">this</span>._operation.call(<span class="hljs-literal">null</span>, envelope, callback)
+        </li>
+
+
+        <li id="section-6">
+            <div class="annotation">
+
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-6">&#182;</a>
+              </div>
+              <p>Purge unused buckets.</p>
+
+            </div>
+
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-keyword">var</span> before = <span class="hljs-keyword">this</span>._Date.now() - coalesce(<span class="hljs-keyword">this</span>._fractured.timeout, <span class="hljs-literal">Infinity</span>) * <span class="hljs-number">10</span>
+    <span class="hljs-keyword">var</span> iterator = <span class="hljs-keyword">this</span>._buckets.iterator()
+    <span class="hljs-keyword">while</span> (!iterator.end &amp;&amp; iterator.when &lt; before) {
+        <span class="hljs-keyword">var</span> entry = <span class="hljs-keyword">this</span>._buckets.get(iterator.key)
+        <span class="hljs-keyword">if</span> (entry.turnstile.health.occupied == <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">this</span>._buckets.remove(iterator.key)
+        }
+        iterator.previous()
+    }
+</pre></div></div>
+
+        </li>
+
+
+        <li id="section-7">
+            <div class="annotation">
+
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-7">&#182;</a>
+              </div>
+              <p>Get the bucket for the key generated from the work to do, or else create
+the bucket if it does not exist.</p>
+
+            </div>
+
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-keyword">var</span> key = <span class="hljs-built_in">String</span>(<span class="hljs-keyword">this</span>._extractor.call(<span class="hljs-literal">null</span>, envelope.body.body))
+    <span class="hljs-keyword">var</span> bucket = <span class="hljs-keyword">this</span>._buckets.get(key, { <span class="hljs-attr">turnstile</span>: <span class="hljs-literal">null</span> })
+    <span class="hljs-keyword">if</span> (bucket.turnstile == <span class="hljs-literal">null</span>) {
+        bucket.turnstile = <span class="hljs-keyword">new</span> Turnstile(<span class="hljs-keyword">this</span>._fractured)
+    }
+    <span class="hljs-keyword">return</span> bucket
 }
+
+</pre></div></div>
+
+        </li>
+
+
+        <li id="section-8">
+            <div class="annotation">
+
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-8">&#182;</a>
+              </div>
+              <p>TODO Note that stringify is going to depend on object properties being in the
+same order.</p>
+
+            </div>
+
+        </li>
+
+
+        <li id="section-9">
+            <div class="annotation">
+
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-9">&#182;</a>
+              </div>
+
+            </div>
+
+            <div class="content"><div class='highlight'><pre>Fracture.prototype._fracture = cadence(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">async, envelope</span>) </span>{
+    <span class="hljs-keyword">async</span>(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">this</span>._getBucket(envelope).turnstile.enter({
+            <span class="hljs-attr">when</span>: envelope.when,
+            <span class="hljs-attr">method</span>: envelope.body.method,
+            <span class="hljs-attr">error</span>: coalesce(envelope.body.error),
+            <span class="hljs-attr">object</span>: coalesce(envelope.body.object),
+            <span class="hljs-attr">body</span>: coalesce(envelope.body.body),
+            <span class="hljs-attr">started</span>: coalesce(envelope.body.started),
+            <span class="hljs-attr">completed</span>: <span class="hljs-keyword">async</span>()
+        })
+    }, [], <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">vargs</span>) </span>{
+        envelope.body.completed.apply(<span class="hljs-literal">null</span>, vargs)
+    })
+})
 
 Fracture.prototype.enter = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">envelope</span>) </span>{
     <span class="hljs-keyword">this</span>.turnstile.enter({
-        <span class="hljs-attr">started</span>: envelope.started,
+        <span class="hljs-attr">method</span>: <span class="hljs-keyword">this</span>._$fracture,
+        <span class="hljs-attr">when</span>: coalesce(envelope.when, <span class="hljs-keyword">this</span>._Date.now()),
         <span class="hljs-attr">body</span>: {
-            <span class="hljs-attr">completed</span>: coalesce(envelope.completed, abend),
-            <span class="hljs-attr">work</span>: envelope.body
+            <span class="hljs-attr">method</span>: envelope.method,
+            <span class="hljs-attr">error</span>: coalesce(envelope.error),
+            <span class="hljs-attr">object</span>: coalesce(envelope.object),
+            <span class="hljs-attr">body</span>: coalesce(envelope.body),
+            <span class="hljs-attr">started</span>: coalesce(envelope.started, noop),
+            <span class="hljs-attr">completed</span>: coalesce(envelope.completed, noop),
         }
     })
 }
 
-Fracture.prototype.enqueue = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">work, callback</span>) </span>{
-    <span class="hljs-keyword">this</span>.enter({ <span class="hljs-attr">completed</span>: callback, <span class="hljs-attr">body</span>: work })
-}
+<span class="hljs-built_in">module</span>.exports = Fracture
 
-Fracture.prototype.push = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">work</span>) </span>{
-    <span class="hljs-keyword">this</span>.enter({ <span class="hljs-attr">body</span>: work })
-}
-
-<span class="hljs-built_in">module</span>.exports = Fracture</pre></div></div>
+</pre></div></div>
 
         </li>
 
