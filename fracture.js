@@ -38,14 +38,14 @@ function Fracture (options) {
 Fracture.prototype._getBucket = function (envelope) {
     // Purge unused buckets.
     var before = this._Date.now() - coalesce(this._fractured.timeout, Infinity) * 10
-    var iterator = this._buckets.iterator()
-    while (!iterator.end && iterator.when < before) {
-        var entry = this._buckets.get(iterator.key)
-        if (entry.turnstile.health.occupied == 0) {
-            this._buckets.remove(iterator.key)
+    var purge = this._buckets.purge()
+    while (purge.cartridge && purge.cartridge.when < before) {
+        if (purge.cartridge.value.turnstile.health.occupied == 0) {
+            purge.cartridge.remove()
         }
-        iterator.previous()
+        purge.next()
     }
+    purge.release()
     // Get the bucket for the key generated from the work to do, or else create
     // the bucket if it does not exist.
     var key = String(this._extractor.call(null, envelope.body.body))
