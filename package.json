@@ -22,7 +22,7 @@
     "dependencies":
     {
                             "abend":                        "1.0.x",
-                            "cadence":                      "1.0.x",
+                            "cadence":                      "2.0.x",
                             "extant":                       "1.0.1",
                             "hash.fnv":                     "1.0.x",
                             "magazine":                     "4.0.x",
