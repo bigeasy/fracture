@@ -23,7 +23,7 @@
     {
                             "abend":                        "1.0.x",
                             "cadence":                      "2.0.x",
-                            "extant":                       "1.0.1",
+                            "extant":                       "1.0.x",
                             "hash.fnv":                     "1.0.x",
                             "magazine":                     "4.0.x",
                             "nop":                          "1.0.x",
