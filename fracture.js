@@ -76,6 +76,32 @@ Fracture.prototype._fracture = cadence(function (async, envelope) {
     })
 })
 
+// TODO What am I supposed to be doing in this common queue? Looks like I'm
+// using the back-pressure of calling the fracture turnstile to push into the
+// common queue, but how does that work and why am I doing it? It doens't end up
+// being the case that I'm waiting on each queue, not unless I have a great many
+// fractures relative to turnstiles in the funnel. If so, then yes, the funnel
+// may have 24 turnstiles and there might be 1024 fractures, so that we're
+// usually running 24 in parallel, but wouldn't it be better to have 24
+// fractures and split them up all at once?
+//
+// Why have the funnel? It might have been because I was still entertaining
+// notions of work resubmission, so I didn't items to leave the funnel until
+// they where ready to be assigned. At this point the only thing I'd loose would
+// be the common accounting of the funnel, which was going to be off anyway. We
+// could restore that accounting though, maybe through a function that returns
+// the health, or a property evaluation, so that it is calcuated.
+//
+// I've not seen myself adjust turnstiles in production yet. It's more of a
+// tuning parameter than a runtime parameter. It could probably get frozen.
+//
+// Exposing the fractures in an array would allow the user to implment a flush
+// of sorts, if the user wanted to make sure than their work got through no
+// matter which fracture it went down. Is there a way to return some accounting
+// on enter? Of course there is. Enter is already fussy beast, we can return
+// some information, including perhaps some sort of cookie.
+
+//
 Fracture.prototype.enter = function (envelope) {
     this.turnstile.enter({
         object: this,
