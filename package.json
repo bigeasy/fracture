@@ -27,7 +27,6 @@
                             "hash.fnv":                     "1.0.x",
                             "magazine":                     "3.0.x",
                             "nop":                          "1.0.x",
-                            "operation":                    "1.6.x",
                             "turnstile":                    "3.2.3"
     },
     "devDependencies":

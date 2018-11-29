@@ -2,7 +2,6 @@ var cadence = require('cadence')
 var abend = require('abend')
 var Turnstile = require('turnstile/redux')
 var fnv = require('hash.fnv')
-var Operation = require('operation/variadic')
 var coalesce = require('extant')
 var Cache = require('magazine')
 var noop = require('nop')
@@ -30,7 +29,6 @@ function Fracture (options) {
     } else {
         this._extractor = options.extractor
     }
-    this._$fracture = new Operation([ this, '_fracture' ])
 }
 
 // Get a bucket or create one if it doesn't exist. Take this opportunity to
@@ -80,7 +78,8 @@ Fracture.prototype._fracture = cadence(function (async, envelope) {
 
 Fracture.prototype.enter = function (envelope) {
     this.turnstile.enter({
-        method: this._$fracture,
+        object: this,
+        method: this._fracture,
         when: coalesce(envelope.when, this._Date.now()),
         body: {
             method: envelope.method,
