@@ -26,7 +26,7 @@ function Fracture (options) {
     if (options.buckets) {
         var extractor = options.extractor
         this._extractor = function (work) {
-            var buffer = new Buffer(String(extractor(work)))
+            var buffer = Buffer.from(String(extractor(work)))
             return fnv(0, buffer, 0, buffer.length)
         }
     } else {
