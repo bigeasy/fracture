@@ -1,6 +1,6 @@
 var cadence = require('cadence')
 var abend = require('abend')
-var Turnstile = require('turnstile/redux')
+var Turnstile = require('turnstile')
 var fnv = require('hash.fnv')
 var coalesce = require('extant')
 var Cache = require('magazine')

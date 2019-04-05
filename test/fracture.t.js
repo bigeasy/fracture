@@ -7,10 +7,10 @@ function prove (async, okay) {
             module: 'turnstile',
             method: 'enter',
             when: 0,
+            canceled: false,
             waited: 0,
             timedout: false,
-            body: { id: 0 },
-            error: null
+            body: { id: 0 }
         },
         message: 'push'
     }, {
@@ -18,10 +18,10 @@ function prove (async, okay) {
             module: 'turnstile',
             method: 'enter',
             when: 0,
+            canceled: false,
             waited: 0,
             timedout: false,
-            body: { id: 0 },
-            error: null
+            body: { id: 0 }
         },
         message: 'no hash'
     }, {
@@ -29,10 +29,10 @@ function prove (async, okay) {
             module: 'turnstile',
             method: 'enter',
             when: 0,
+            canceled: false,
             waited: 0,
             timedout: false,
-            body: { id: 31 },
-            error: null
+            body: { id: 31 }
         },
         message: 'no hash sync'
     }, {
@@ -40,10 +40,10 @@ function prove (async, okay) {
             module: 'turnstile',
             method: 'enter',
             when: 31,
+            canceled: false,
             waited: 0,
             timedout: false,
-            body: { id: 0 },
-            error: null
+            body: { id: 0 }
         },
         message: 'timed out'
     }, {
@@ -51,10 +51,10 @@ function prove (async, okay) {
             module: 'turnstile',
             method: 'enter',
             when: 31,
+            canceled: false,
             waited: 0,
             timedout: false,
-            body: { id: 0 },
-            error: null
+            body: { id: 0 }
         },
         message: 'purge'
     }]
