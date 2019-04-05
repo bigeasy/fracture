@@ -6,6 +6,9 @@ var coalesce = require('extant')
 var Cache = require('magazine')
 var noop = require('nop')
 
+// TODO We actually do not want to use Magazine. Let's fan out and start all our
+// turnstiles and let them breathe.
+
 // TODO Need to come back and convince myself that there is no way to blow the
 // stack with turnstile calling turnstiles. I know that there isn't because of
 // Cadence. A trampoline is a trampoline. I know it, but I'm not convinced.
