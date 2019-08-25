@@ -1,124 +1,196 @@
-var cadence = require('cadence')
-var abend = require('abend')
-var Turnstile = require('turnstile')
-var fnv = require('hash.fnv')
-var coalesce = require('extant')
-var Cache = require('magazine')
-var noop = require('nop')
+// Node.js API.
+const assert = require('assert')
 
-// TODO We actually do not want to use Magazine. Let's fan out and start all our
-// turnstiles and let them breathe.
+// A fast 32-bit hash with pretty good avalanche.
+const fnv = require('hash.fnv')
 
-// TODO Need to come back and convince myself that there is no way to blow the
-// stack with turnstile calling turnstiles. I know that there isn't because of
-// Cadence. A trampoline is a trampoline. I know it, but I'm not convinced.
+// An `async`/`await` message queue.
+const Avenue = require('avenue')
+
+// Return the first non-null value.
+const coalesce = require('extant')
+
+// A Turnstile that will distribute work to a fixed pool of workers according to
+// hashed value. This method of distributing work is otherwise known as
+// sharding, but that it too much for some people to handle, so I've taken to
+// call it horizontal partitioning. The work ingress interface is the same as
+// Turnstile as is the worker interface. You can use Fracture with a Turnstile
+// Queue, Set or Check interface wrapper.
+//
+// `Fracture` depends on `Destructible` which I use in all my applications, so
+// you should use it in yours, but if not, you'll create a `Destructible`
+// instance as part of creating a `Fracture`.
 
 //
-function Fracture (options) {
-    this._Date = coalesce(options.Date, Date)
-    this._buckets = new Cache({ Date: this._Date }).createMagazine()
-    var fractured = JSON.parse(JSON.stringify(coalesce(options.fractured, {})))
-    var funnel = JSON.parse(JSON.stringify(coalesce(options.funnel, {})))
-    funnel.Date = fractured.Date = this._Date
-    this.turnstile = new Turnstile(funnel)
-    this._fractured = fractured
-    this.health = this.turnstile.health
-    if (options.buckets) {
-        var extractor = options.extractor
-        this._extractor = function (work) {
-            var buffer = Buffer.from(String(extractor(work)))
+class Fracture {
+    //
+
+    // `const fracture = new Fracture(destructible, options)`
+    //
+    // Create a `Fracture` that will terminate when the given `destructible`
+    // terminates. The `options` are as follows.
+    //
+    //  * `turnstiles` &mdash; the number of worker functions instances to
+    //  start.
+    //  * `extractor` &mdash; a function that extracts either a string value
+    //  that is hashed using the FNV hash or an integer value that is assumed to
+    //  be an already calcuated 32-bit hash value.
+
+    //
+    constructor (destructible, options) {
+        // Whether or not we've been destroyed.
+        this.destroyed = false
+        // Timeout for queue.
+        this.timeout = coalesce(options.timeout, Infinity)
+        // We can provide a mock `Date` for timeout debugging.
+        this._Date = coalesce(options.Date, Date)
+        // Count of turnstiles, i.e. worker functions.
+        const turnstiles = coalesce(options.turnstiles, 1)
+        // Health interface identitical to the one in `Turnstile`.
+        this.health = { occupied: 0, waiting: 0, rejecting: 0, turnstiles }
+        // We'll decided whether or not we should hash, or if it is already
+        // hashed based on the return value.
+        const extractor = options.extractor
+        this._extractor = function (entry) {
+            const value = extractor(entry)
+            if (Number.isInteger(value)) {
+                return value
+            }
+            const buffer = Buffer.from(String(value))
             return fnv(0, buffer, 0, buffer.length)
         }
-    } else {
-        this._extractor = options.extractor
-    }
-}
+        //
 
-// Get a bucket or create one if it doesn't exist. Take this opportunity to
-// deallocate any buckets that are not in use.
-
-//
-Fracture.prototype._getBucket = function (envelope) {
-    // Purge unused buckets.
-    var before = this._Date.now() - coalesce(this._fractured.timeout, Infinity) * 10
-    var purge = this._buckets.purge()
-    while (purge.cartridge && purge.cartridge.when < before) {
-        if (purge.cartridge.value.turnstile.health.occupied == 0) {
-            purge.cartridge.remove()
+        // Create our pool of workers.
+        this._turnstiles = []
+        for (let i = 0; i < turnstiles; i++) {
+            const turnstile = { queue: new Avenue, shifter: null }
+            turnstile.shifter = turnstile.queue.shifter()
+            this._turnstiles.push(turnstile)
+            destructible.durable([ 'turnstile', i ], this._turnstile(turnstile.shifter))
         }
-        purge.next()
-    }
-    purge.release()
-    // Get the bucket for the key generated from the work to do, or else create
-    // the bucket if it does not exist.
-    var key = String(this._extractor.call(null, envelope.body.body))
-    var bucket = this._buckets.get(key, { turnstile: null })
-    if (bucket.turnstile == null) {
-        bucket.turnstile = new Turnstile(this._fractured)
-    }
-    return bucket
-}
+        //
 
-// TODO Note that stringify is going to depend on object properties being in the
-// same order.
-
-//
-Fracture.prototype._fracture = cadence(function (async, envelope) {
-    async(function () {
-        this._getBucket(envelope).turnstile.enter({
-            when: envelope.when,
-            method: envelope.body.method,
-            error: coalesce(envelope.body.error),
-            object: coalesce(envelope.body.object),
-            body: coalesce(envelope.body.body),
-            started: coalesce(envelope.body.started),
-            completed: async()
+        // Create a queue of work that has timed out.
+        this._rejected = new Avenue
+        // Poll the rejectable queue for timed out work.
+        destructible.durable('rejector', this._rejector(this._rejected.shifter()))
+        // Destroy all shifters on destruction.
+        destructible.destruct(() => {
+            this.destroyed = true
+            for (const turnstile of this._turnstiles) {
+                turnstile.queue.push(null)
+            }
+            this._rejected.push(null)
         })
-    }, [], function (vargs) {
-        envelope.body.completed.apply(null, vargs)
-    })
-})
 
-// TODO What am I supposed to be doing in this common queue? Looks like I'm
-// using the back-pressure of calling the fracture turnstile to push into the
-// common queue, but how does that work and why am I doing it? It doens't end up
-// being the case that I'm waiting on each queue, not unless I have a great many
-// fractures relative to turnstiles in the funnel. If so, then yes, the funnel
-// may have 24 turnstiles and there might be 1024 fractures, so that we're
-// usually running 24 in parallel, but wouldn't it be better to have 24
-// fractures and split them up all at once?
-//
-// Why have the funnel? It might have been because I was still entertaining
-// notions of work resubmission, so I didn't items to leave the funnel until
-// they where ready to be assigned. At this point the only thing I'd loose would
-// be the common accounting of the funnel, which was going to be off anyway. We
-// could restore that accounting though, maybe through a function that returns
-// the health, or a property evaluation, so that it is calcuated.
-//
-// I've not seen myself adjust turnstiles in production yet. It's more of a
-// tuning parameter than a runtime parameter. It could probably get frozen.
-//
-// Exposing the fractures in an array would allow the user to implment a flush
-// of sorts, if the user wanted to make sure than their work got through no
-// matter which fracture it went down. Is there a way to return some accounting
-// on enter? Of course there is. Enter is already fussy beast, we can return
-// some information, including perhaps some sort of cookie.
+        // Hang onto the `Destructible` for the sake of `destroy()`.
+        this._destructible = destructible
+    }
 
-//
-Fracture.prototype.enter = function (envelope) {
-    this.turnstile.enter({
-        object: this,
-        method: this._fracture,
-        when: coalesce(envelope.when, this._Date.now()),
-        body: {
-            method: envelope.method,
-            error: coalesce(envelope.error),
-            object: coalesce(envelope.object),
-            body: coalesce(envelope.body),
-            started: coalesce(envelope.started, noop),
-            completed: coalesce(envelope.completed, noop),
+    // `fracture.destroy()` &mdash; invoke the `destroy()` method of the
+    // `Destructible` given to our constructor. Simplifies construction of
+    // ephemeral `Fracture`s if ever any are constructed.
+
+    //
+    destroy () {
+        this._destructible.destroy()
+    }
+
+    // `fracture._turnstile(shifter)` &mdash; a single instance of a worker
+    // function. It runs for the lifetime of this `Fracture`, pulling work off
+    // of a work queue and `await`ing work when there is none available.
+
+    //
+    async _turnstile (shifter) {
+        try {
+            this.health.occupied++
+            for (;;) {
+                let entry = shifter.sync.shift()
+                if (entry == null) {
+                    this.health.occupied--
+                    entry = await shifter.shift()
+                    this.health.occupied++
+                }
+                if (entry == null) {
+                    break
+                }
+                this.health.waiting--
+                const now = this._Date.now()
+                const timedout = entry.timesout < now
+                const waited = now - entry.when
+                const canceled = this.destroyed || timedout
+                await entry.method.call(entry.object, entry.body, {
+                    when: entry.when, waited: now - entry.when, timedout, canceled
+                })
+            }
+        } finally {
+            this.health.occupied--
         }
-    })
+    }
+
+    // `fracture._rejector(shifter)` &mdash; invoke worker function with a timed
+    // out state.
+    //
+    //  * `shifter` &mdash; shifter for rejected queue.
+    //
+    // When we call this function, we've already asserted that the entry in
+    // question has expired, so do not repeat the test.
+
+    //
+    async _rejector (shifter) {
+        try {
+            for await (const entry of shifter.iterator()) {
+                const now = this._Date.now()
+                this.health.rejecting++
+                this.health.waiting--
+                await entry.method.call(entry.object, entry.body, {
+                    when: entry.when, waited: now - entry.when, timedout: true , canceled: true
+                })
+                this.health.rejecting--
+            }
+        } finally {
+            // The only statement that throws above is the worker function call.
+            this.health.rejecting--
+        }
+    }
+
+    // `fracture.enter(entry, body[, object][, when])` &mdash; push a work entry
+    // into the work queue.
+    //
+    //  * `method` &mdash; the work function to call.
+    //  * `body` &mdash; argument to pass to the work function.
+    //  * `object` &mdash; optional context object for the work function call.
+    //  * `when` &mdash; optional submission time for the work.
+    //
+    // The `method` is invoked with the optional `object` as the `this`
+    // property and with the given given `body` as the first argument to the
+    // work method. The work method will receive a state argument as the final
+    // argument to the function.
+
+    //
+    enter (method, body, ...vargs) {
+        assert(!this.destroyed, 'already destroyed')
+        // Pop and shift variadic arguments.
+        const now = this._Date.now()
+        const when = typeof vargs[vargs.length - 1] == 'number' ? vargs.pop() : now
+        const object = coalesce(vargs.shift())
+        // Hash out a turnstile.
+        const turnstile = this._turnstiles[this._extractor.call(null, body) % this._turnstiles.length]
+        // Push the work into the turnstile.
+        turnstile.queue.push({ method, object, when, body, timesout: when + this.timeout })
+        // We check for rejections on entry assuming that if we've managed to
+        // make a list a certain length, there is no harm in leaving it that
+        // length for however long it takes for us to detect that it stuggling.
+        for (;;) {
+            const peek = turnstile.shifter.sync.peek()
+            console.log(peek)
+            if (peek == null || now < peek.timesout) {
+                break
+            }
+            this._rejected.push(turnstile.shifter.sync.shift())
+        }
+    }
 }
 
 module.exports = Fracture

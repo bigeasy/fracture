@@ -1,1 +1,1 @@
-A error-first callback work queue that splits work on a hashed key.
+An `async`/`await` work queue that splits work on a hashed key.
