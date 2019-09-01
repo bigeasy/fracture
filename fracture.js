@@ -139,19 +139,16 @@ class Fracture {
 
     //
     async _rejector (shifter) {
-        try {
-            for await (const entry of shifter.iterator()) {
-                const now = this._Date.now()
-                this.health.rejecting++
-                this.health.waiting--
+        for await (const entry of shifter.iterator()) {
+            const now = this._Date.now()
+            try {
                 await entry.method.call(entry.object, entry.body, {
                     when: entry.when, waited: now - entry.when, timedout: true , canceled: true
                 })
+            } finally {
+                // The only statement that throws above is the worker function call.
                 this.health.rejecting--
             }
-        } finally {
-            // The only statement that throws above is the worker function call.
-            this.health.rejecting--
         }
     }
 
@@ -181,13 +178,15 @@ class Fracture {
         turnstile.queue.push({ method, object, when, body, timesout: when + this.timeout })
         // We check for rejections on entry assuming that if we've managed to
         // make a list a certain length, there is no harm in leaving it that
-        // length for however long it takes for us to detect that it stuggling.
+        // length for however long it takes for us to detect that it is
+        // stuggling.
         for (;;) {
             const peek = turnstile.shifter.sync.peek()
-            console.log(peek)
             if (peek == null || now < peek.timesout) {
                 break
             }
+            this.health.waiting--
+            this.health.rejecting++
             this._rejected.push(turnstile.shifter.sync.shift())
         }
     }
