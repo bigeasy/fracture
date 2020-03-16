@@ -28,7 +28,8 @@
     },
     "devDependencies":
     {
-                            "destructible":                 "4.0.x"
+                            "destructible":                 "4.0.x",
+                            "proof":                        "^8.0.0-alpha.1"
     },
     "main":                 "fracture",
     "scripts":
