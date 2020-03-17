@@ -57,6 +57,7 @@ async function prove (okay) {
             waited: 0,
             when: 0
         }], 'states')
+        await fracture.terminate()
     }())
 
     await destructible.promise

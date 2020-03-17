@@ -40,8 +40,8 @@ class Fracture {
 
     //
     constructor (destructible, options) {
-        // Whether or not we've been destroyed.
-        this.destroyed = false
+        // Whether or not we've been terminated.
+        this.terminated = false
         // Timeout for queue.
         this.timeout = coalesce(options.timeout, Infinity)
         // We can provide a mock `Date` for timeout debugging.
@@ -80,14 +80,6 @@ class Fracture {
         this._rejected = new Avenue
         // Poll the rejectable queue for timed out work.
         destructible.durable('rejector', this._rejector(this._rejected.shifter()))
-        // Destroy all shifters on destruction.
-        destructible.destruct(() => {
-            this.destroyed = true
-            for (const turnstile of this._turnstiles) {
-                turnstile.queue.push(null)
-            }
-            this._rejected.push(null)
-        })
 
         // Hang onto the `Destructible` for the sake of `destroy()`.
         this._destructible = destructible
@@ -107,6 +99,15 @@ class Fracture {
         const drain = this._drain
         this._checkDrain()
         return drain
+    }
+
+    terminate () {
+        this.terminated = true
+        for (const turnstile of this._turnstiles) {
+            turnstile.queue.push(null)
+        }
+        this._rejected.push(null)
+        return this.drain()
     }
 
     _checkDrain () {
@@ -146,7 +147,7 @@ class Fracture {
                 const now = this._Date.now()
                 const timedout = entry.timesout < now
                 const waited = now - entry.when
-                const canceled = this.destroyed || timedout
+                const canceled = this.terminated || timedout
                 await entry.method.call(entry.object, entry.body, {
                     when: entry.when, waited: now - entry.when, timedout, canceled
                 })
@@ -196,11 +197,13 @@ class Fracture {
 
     //
     enter (method, body, ...vargs) {
-        assert(!this.destroyed, 'already destroyed')
+        assert(!this.terminated, 'enter when terminated')
         // Increment wiating count.
         this.health.waiting++
         // Pop and shift variadic arguments.
         const now = this._Date.now()
+        // TODO This is now dubious, we used it when Fracture was composed of
+        // Turnstiles but now Fracture is it's own thing.
         const when = typeof vargs[vargs.length - 1] == 'number' ? vargs.pop() : now
         const object = coalesce(vargs.shift())
         // Hash out a turnstile.
