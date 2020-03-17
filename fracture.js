@@ -133,6 +133,9 @@ class Fracture {
         try {
             this.health.occupied++
             for (;;) {
+                // Sync `shift` returns `null` for at tail and end of stream,
+                // but async shift only returns null at end of stream. We'll
+                // know which sort of `null` it is when we call async `shift`.
                 let entry = shifter.sync.shift()
                 if (entry == null) {
                     this.health.occupied--
@@ -168,17 +171,29 @@ class Fracture {
 
     //
     async _rejector (shifter) {
-        for await (const entry of shifter.iterator()) {
-            const now = this._Date.now()
-            try {
+        try {
+            this.health.rejecting++
+            for (;;) {
+                let entry = shifter.sync.shift()
+                if (entry == null) {
+                    this.health.rejecting--
+                    this._checkDrain()
+                    entry = await shifter.shift()
+                    this.health.rejecting++
+                }
+                if (entry == null) {
+                    break
+                }
+                this.health.waiting--
+                const now = this._Date.now()
                 await entry.method.call(entry.object, entry.body, {
                     when: entry.when, waited: now - entry.when, timedout: true , canceled: true
                 })
-            } finally {
-                // The only statement that throws above is the worker function call.
-                this.health.rejecting--
-                this._checkDrain()
             }
+        } finally {
+            // The only statement that throws above is the worker function call.
+            this.health.rejecting--
+            this._checkDrain()
         }
     }
 
@@ -219,8 +234,6 @@ class Fracture {
             if (peek == null || now < peek.timesout) {
                 break
             }
-            this.health.waiting--
-            this.health.rejecting++
             this._rejected.push(turnstile.shifter.sync.shift())
         }
     }

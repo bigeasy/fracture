@@ -32,6 +32,9 @@ async function prove (okay) {
         }, 1, { property: 1 }, -3)
         fracture.enter(async function (value, state) {
             test.push(state)
+        }, 1, { property: 1 }, -3)
+        fracture.enter(async function (value, state) {
+            test.push(state)
             futures.third.resolve(this.property + value)
         }, 1, { property: 1 }, 0)
         okay(await futures.first.promise, 'a', 'first work')
@@ -46,6 +49,11 @@ async function prove (okay) {
             timedout: false,
             waited: 0,
             when: 0
+        }, {
+            canceled: true,
+            timedout: true,
+            waited: 3,
+            when: -3
         }, {
             canceled: true,
             timedout: true,
