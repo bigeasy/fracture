@@ -10,6 +10,8 @@ const Avenue = require('avenue')
 // Return the first non-null value.
 const coalesce = require('extant')
 
+const noop = require('nop')
+
 // A Turnstile that will distribute work to a fixed pool of workers according to
 // hashed value. This method of distributing work is otherwise known as
 // sharding, but that it too much for some people to handle, so I've taken to
@@ -59,7 +61,10 @@ class Fracture {
             const buffer = Buffer.from(String(value))
             return fnv(0, buffer, 0, buffer.length)
         }
-        //
+
+        // A promise used to track train of work queues.
+        this._drain = null
+        this._drained = noop
 
         // Create our pool of workers.
         this._turnstiles = []
@@ -88,13 +93,34 @@ class Fracture {
         this._destructible = destructible
     }
 
-    // `fracture.destroy()` &mdash; invoke the `destroy()` method of the
-    // `Destructible` given to our constructor. Simplifies construction of
-    // ephemeral `Fracture`s if ever any are constructed.
+    // Confused at the moment about how to wind up a streaming object that
+    // depends on Destructible. Let's recall that we don't want to assume that
+    // the user is done with us. Maybe they want to send a final message to all
+    // the streams (which we don't do, but we could) and have it wind down that
+    // way.
 
     //
-    destroy () {
-        this._destructible.destroy()
+    drain () {
+        if (this._drain == null) {
+            this._drain = new Promise(resolve => this._drained = resolve)
+        }
+        const drain = this._drain
+        this._checkDrain()
+        return drain
+    }
+
+    _checkDrain () {
+        if (
+            this._drain != null &&
+            this.health.occupied == 0 &&
+            this.health.rejecting == 0 &&
+            this.health.waiting == 0
+        ) {
+            this._drain = null
+            const drained = this._drained
+            this._drained = noop
+            drained.call()
+        }
     }
 
     // `fracture._turnstile(shifter)` &mdash; a single instance of a worker
@@ -109,6 +135,7 @@ class Fracture {
                 let entry = shifter.sync.shift()
                 if (entry == null) {
                     this.health.occupied--
+                    this._checkDrain()
                     entry = await shifter.shift()
                     this.health.occupied++
                 }
@@ -126,6 +153,7 @@ class Fracture {
             }
         } finally {
             this.health.occupied--
+            this._checkDrain()
         }
     }
 
@@ -148,6 +176,7 @@ class Fracture {
             } finally {
                 // The only statement that throws above is the worker function call.
                 this.health.rejecting--
+                this._checkDrain()
             }
         }
     }
@@ -168,6 +197,8 @@ class Fracture {
     //
     enter (method, body, ...vargs) {
         assert(!this.destroyed, 'already destroyed')
+        // Increment wiating count.
+        this.health.waiting++
         // Pop and shift variadic arguments.
         const now = this._Date.now()
         const when = typeof vargs[vargs.length - 1] == 'number' ? vargs.pop() : now
