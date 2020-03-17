@@ -34,6 +34,6 @@
     "main":                 "fracture",
     "scripts":
     {
-                            "test": "mocha test/*.test.js"
+                            "test": "proof test/*.test.js"
     }
 }
