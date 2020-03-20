@@ -13,15 +13,13 @@ const coalesce = require('extant')
 const noop = require('nop')
 
 // A Turnstile that will distribute work to a fixed pool of workers according to
-// hashed value. This method of distributing work is otherwise known as
-// sharding, but that it too much for some people to handle, so I've taken to
-// call it horizontal partitioning. The work ingress interface is the same as
-// Turnstile as is the worker interface. You can use Fracture with a Turnstile
-// Queue, Set or Check interface wrapper.
+// hashed value. The work ingress interface is the same as Turnstile as is the
+// worker interface. You can use Fracture with a Turnstile Queue, Set or Check
+// interface wrapper.
 //
 // `Fracture` depends on `Destructible` which I use in all my applications, so
-// you should use it in yours, but if not, you'll create a `Destructible`
-// instance as part of creating a `Fracture`.
+// you should use it in yours, but if not, you'll create need to create a single
+// `Destructible` instance as part of creating a `Fracture`.
 
 //
 class Fracture {
@@ -32,11 +30,26 @@ class Fracture {
     // Create a `Fracture` that will terminate when the given `destructible`
     // terminates. The `options` are as follows.
     //
+    // Entries in the queue for longer than the `timeout` value will be marked
+    // as `timedout` and `canceled` when they are submitted to the worker
+    // function. This is a load shedding strategy for the queue. If you use the
+    // timeout function you worker function should process timed out entries
+    // quickly, perhaps doing nothing at all in order to shed load.
+    //
+    // The timeout function does not cancel the worker function in any way. If
+    // your worker function performs an action that could block and cause a
+    // backlog, you should also use a timeout mechanism within the function.
+    // For example, if you perform an HTTP request you should timeout the HTTP
+    // request using the timeout property of the HTTP client.
+    //
+    //
     //  * `turnstiles` &mdash; the number of worker functions instances to
     //  start.
+    //  * `timeout` &mdash; mark an entry in the queue as timed out and canceled
+    //  if it has been waiting in the queue for longer than the timeout value.
     //  * `extractor` &mdash; a function that extracts either a string value
     //  that is hashed using the FNV hash or an integer value that is assumed to
-    //  be an already calcuated 32-bit hash value.
+    //  be an already calculated 32-bit hash value.
 
     //
     constructor (destructible, options) {
@@ -48,7 +61,7 @@ class Fracture {
         this._Date = coalesce(options.Date, Date)
         // Count of turnstiles, i.e. worker functions.
         const turnstiles = coalesce(options.turnstiles, 1)
-        // Health interface identitical to the one in `Turnstile`.
+        // Health interface identical to the one in `Turnstile`.
         this.health = { occupied: 0, waiting: 0, rejecting: 0, turnstiles }
         // We'll decided whether or not we should hash, or if it is already
         // hashed based on the return value.
@@ -166,6 +179,16 @@ class Fracture {
     //
     //  * `shifter` &mdash; shifter for rejected queue.
     //
+    // **TODO**: Should have you have a rejector in fracture? You added a
+    // rejector to Turnstile to prune the backlog of the worker function is
+    // blocking, but with Fracture you intend to have each worker function
+    // process a sub-queue hashed by a key in order. The rejector is its own
+    // queue and items would be processed in some arbitrary order.
+    //
+    // **TODO**: What is the alternative though? If you push onto the queue and
+    // it blocked, so you instead raise an exception? Or maybe return false and
+    // let the client handle it?
+    //
     // When we call this function, we've already asserted that the entry in
     // question has expired, so do not repeat the test.
 
@@ -228,7 +251,7 @@ class Fracture {
         // We check for rejections on entry assuming that if we've managed to
         // make a list a certain length, there is no harm in leaving it that
         // length for however long it takes for us to detect that it is
-        // stuggling.
+        // struggling.
         for (;;) {
             const peek = turnstile.shifter.sync.peek()
             if (peek == null || now < peek.timesout) {
