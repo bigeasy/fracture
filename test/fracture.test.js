@@ -68,5 +68,5 @@ async function prove (okay) {
         await fracture.terminate()
     }())
 
-    await destructible.promise
+    await destructible.destructed
 }
