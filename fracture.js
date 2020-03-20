@@ -234,20 +234,18 @@ class Fracture {
     // argument to the function.
 
     //
-    enter (method, body, ...vargs) {
+    enter ({ method, body, when, object }) {
         assert(!this.terminated, 'enter when terminated')
         // Increment wiating count.
         this.health.waiting++
         // Pop and shift variadic arguments.
-        const now = this._Date.now()
+        const now = when || this._Date.now()
         // TODO This is now dubious, we used it when Fracture was composed of
         // Turnstiles but now Fracture is it's own thing.
-        const when = typeof vargs[vargs.length - 1] == 'number' ? vargs.pop() : now
-        const object = coalesce(vargs.shift())
         // Hash out a turnstile.
         const turnstile = this._turnstiles[this._extractor.call(null, body) % this._turnstiles.length]
         // Push the work into the turnstile.
-        turnstile.queue.push({ method, object, when, body, timesout: when + this.timeout })
+        turnstile.queue.push({ method, object, when: now, body, timesout: now + this.timeout })
         // We check for rejections on entry assuming that if we've managed to
         // make a list a certain length, there is no harm in leaving it that
         // length for however long it takes for us to detect that it is
