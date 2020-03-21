@@ -47,9 +47,6 @@ class Fracture {
     //  start.
     //  * `timeout` &mdash; mark an entry in the queue as timed out and canceled
     //  if it has been waiting in the queue for longer than the timeout value.
-    //  * `extractor` &mdash; a function that extracts either a string value
-    //  that is hashed using the FNV hash or an integer value that is assumed to
-    //  be an already calculated 32-bit hash value.
 
     //
     constructor (destructible, options) {
@@ -63,17 +60,6 @@ class Fracture {
         const turnstiles = coalesce(options.turnstiles, 1)
         // Health interface identical to the one in `Turnstile`.
         this.health = { occupied: 0, waiting: 0, rejecting: 0, turnstiles }
-        // We'll decided whether or not we should hash, or if it is already
-        // hashed based on the return value.
-        const extractor = options.extractor
-        this._extractor = function (entry) {
-            const value = extractor(entry)
-            if (Number.isInteger(value)) {
-                return value
-            }
-            const buffer = Buffer.from(String(value))
-            return fnv(0, buffer, 0, buffer.length)
-        }
 
         // A promise used to track train of work queues.
         this._drain = null
@@ -165,7 +151,11 @@ class Fracture {
                 const waited = now - entry.when
                 const canceled = this.terminated || timedout
                 await entry.method.call(entry.object, entry.body, {
-                    when: entry.when, waited: now - entry.when, timedout, canceled
+                    when: entry.when,
+                    waited: now - entry.when,
+                    timedout: timedout,
+                    canceled: canceled,
+                    vargs: entry.vargs
                 })
             }
         } finally {
@@ -210,7 +200,11 @@ class Fracture {
                 this.health.waiting--
                 const now = this._Date.now()
                 await entry.method.call(entry.object, entry.body, {
-                    when: entry.when, waited: now - entry.when, timedout: true , canceled: true
+                    when: entry.when,
+                    waited: now - entry.when,
+                    timedout: true ,
+                    canceled: true,
+                    vargs: entry.vargs
                 })
             }
         } finally {
@@ -234,18 +228,19 @@ class Fracture {
     // argument to the function.
 
     //
-    enter ({ method, body, when, object }) {
+    enter ({ method, body, when, object, vargs }) {
         assert(!this.terminated, 'enter when terminated')
         // Increment wiating count.
         this.health.waiting++
         // Pop and shift variadic arguments.
         const now = when || this._Date.now()
+        const index = coalesce(vargs[0], 0)
         // TODO This is now dubious, we used it when Fracture was composed of
         // Turnstiles but now Fracture is it's own thing.
         // Hash out a turnstile.
-        const turnstile = this._turnstiles[this._extractor.call(null, body) % this._turnstiles.length]
+        const turnstile = this._turnstiles[index]
         // Push the work into the turnstile.
-        turnstile.queue.push({ method, object, when: now, body, timesout: now + this.timeout })
+        turnstile.queue.push({ method, object, when: now, body, timesout: now + this.timeout, vargs })
         // We check for rejections on entry assuming that if we've managed to
         // make a list a certain length, there is no harm in leaving it that
         // length for however long it takes for us to detect that it is

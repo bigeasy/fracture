@@ -7,7 +7,6 @@ async function prove (okay) {
     const Fracture = require('..')
     const fracture = new Fracture(destructible, {
         turnstiles: 3,
-        extractor: body => body,
         Date: { now: () => 0 },
         timeout: 1
     })
@@ -25,7 +24,8 @@ async function prove (okay) {
                 futures.first.resolve(value)
                 await futures.second.promise
             },
-            body: 'a'
+            body: 'a',
+            vargs: [ 0 ]
         })
         await new Promise(resolve => setImmediate(resolve))
         // This will reject because it is going to push and then be timed out.
@@ -35,7 +35,8 @@ async function prove (okay) {
             },
             body: 1,
             object: { property: 1 },
-            when: -3
+            when: -3,
+            vargs: [ 0 ]
         })
         fracture.enter({
             method: async function (value, state) {
@@ -43,7 +44,8 @@ async function prove (okay) {
             },
             body: 1,
             object: { property: 1 },
-            when: -3
+            when: -3,
+            vargs: [ 0 ]
         })
         fracture.enter({
             method: async function (value, state) {
@@ -52,7 +54,8 @@ async function prove (okay) {
             },
             body: 1,
             object: { property: 1 },
-            when: 0
+            when: 0,
+            vargs: [ 0 ]
         })
         okay(await futures.first.promise, 'a', 'first work')
         futures.second.resolve()
@@ -65,22 +68,26 @@ async function prove (okay) {
             canceled: false,
             timedout: false,
             waited: 0,
-            when: 0
+            when: 0,
+            vargs: [ 0 ]
         }, {
             canceled: true,
             timedout: true,
             waited: 3,
-            when: -3
+            when: -3,
+            vargs: [ 0 ]
         }, {
             canceled: true,
             timedout: true,
             waited: 3,
-            when: -3
+            when: -3,
+            vargs: [ 0 ]
         }, {
             canceled: false,
             timedout: false,
             waited: 0,
-            when: 0
+            when: 0,
+            vargs: [ 0 ]
         }], 'states')
         await fracture.terminate()
     }())
