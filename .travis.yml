@@ -14,7 +14,6 @@ branches:
 install:
   - npm install --no-package-lock --no-save
   - npm install -g nyc prove
-  - npm ls
 
 script:
   - nyc npm test
