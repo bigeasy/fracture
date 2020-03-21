@@ -17,4 +17,4 @@ install:
   - npm ls
 
 script:
-  - node test/fracture.test.js
+  - nyc npm test
