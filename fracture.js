@@ -84,6 +84,10 @@ class Fracture {
         this._destructible = destructible
     }
 
+    get size () {
+        return this.health.occupied + this.health.rejecting + this.health.waiting
+    }
+
     // Confused at the moment about how to wind up a streaming object that
     // depends on Destructible. Let's recall that we don't want to assume that
     // the user is done with us. Maybe they want to send a final message to all
@@ -110,12 +114,7 @@ class Fracture {
     }
 
     _checkDrain () {
-        if (
-            this._drain != null &&
-            this.health.occupied == 0 &&
-            this.health.rejecting == 0 &&
-            this.health.waiting == 0
-        ) {
+        if (this._drain != null && this.size == 0) {
             this._drain = null
             const drained = this._drained
             this._drained = noop
