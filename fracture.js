@@ -49,7 +49,7 @@ class Fracture {
     //  if it has been waiting in the queue for longer than the timeout value.
 
     //
-    constructor (destructible, options) {
+    constructor (destructible, options = {}) {
         // Whether or not we've been terminated.
         this.terminated = false
         // Timeout for queue.

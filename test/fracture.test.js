@@ -5,7 +5,8 @@ async function prove (okay) {
     const Destructible = require('destructible')
     const destructible = new Destructible('test/fracture.test.js')
     const Fracture = require('..')
-    const fracture = new Fracture(destructible, {
+    new Fracture(destructible.ephemeral('defaults')).terminate()
+    const fracture = new Fracture(destructible.durable('fracture'), {
         turnstiles: 3,
         Date: { now: () => 0 },
         timeout: 1
