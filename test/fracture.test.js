@@ -20,9 +20,9 @@ async function prove (okay) {
         }
         [ 'first', 'second', 'third' ].forEach(name => addFuture(name))
         fracture.enter({
-            method: async (value, state) => {
-                test.push(state)
-                futures.first.resolve(value)
+            method: async (entry) => {
+                test.push(entry)
+                futures.first.resolve(entry.body)
                 await futures.second.promise
             },
             body: 'a',
@@ -31,8 +31,8 @@ async function prove (okay) {
         await new Promise(resolve => setImmediate(resolve))
         // This will reject because it is going to push and then be timed out.
         fracture.enter({
-            method: async function (value, state) {
-                test.push(state)
+            method: async function (entry) {
+                test.push(entry)
             },
             body: 1,
             object: { property: 1 },
@@ -40,8 +40,8 @@ async function prove (okay) {
             vargs: [ 0 ]
         })
         fracture.enter({
-            method: async function (value, state) {
-                test.push(state)
+            method: async function (entry) {
+                test.push(entry)
             },
             body: 1,
             object: { property: 1 },
@@ -49,9 +49,9 @@ async function prove (okay) {
             vargs: [ 0 ]
         })
         fracture.enter({
-            method: async function (value, state) {
-                test.push(state)
-                futures.third.resolve(this.property + value)
+            method: async function (entry) {
+                test.push(entry)
+                futures.third.resolve(this.property + entry.body)
             },
             body: 1,
             object: { property: 1 },
@@ -70,20 +70,24 @@ async function prove (okay) {
             timedout: false,
             waited: 0,
             when: 0,
-            vargs: [ 0 ]
+            vargs: [ 0 ],
+            body: 'a'
         }, {
+            body: 1,
             canceled: true,
             timedout: true,
             waited: 3,
             when: -3,
             vargs: [ 0 ]
         }, {
+            body: 1,
             canceled: true,
             timedout: true,
             waited: 3,
             when: -3,
             vargs: [ 0 ]
         }, {
+            body: 1,
             canceled: false,
             timedout: false,
             waited: 0,

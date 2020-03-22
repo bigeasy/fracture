@@ -149,7 +149,8 @@ class Fracture {
                 const timedout = entry.timesout < now
                 const waited = now - entry.when
                 const canceled = this.terminated || timedout
-                await entry.method.call(entry.object, entry.body, {
+                await entry.method.call(entry.object, {
+                    body: entry.body,
                     when: entry.when,
                     waited: now - entry.when,
                     timedout: timedout,
@@ -198,7 +199,8 @@ class Fracture {
                 }
                 this.health.waiting--
                 const now = this._Date.now()
-                await entry.method.call(entry.object, entry.body, {
+                await entry.method.call(entry.object, {
+                    body: entry.body,
                     when: entry.when,
                     waited: now - entry.when,
                     timedout: true ,
