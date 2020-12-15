@@ -21,7 +21,7 @@
     },
     "dependencies":
     {
-                            "avenue":                       "0.2.0-alpha.3",
+                            "avenue":                       "0.4.0",
                             "extant":                       "^1.0.20",
                             "hash.fnv":                     "^1.0.8",
                             "nop":                          "1.0.0"
