@@ -1,257 +1,151 @@
-// Node.js API.
+const Keyify = require('keyify')
+const Vivifyer = require('vivifyer')
 const assert = require('assert')
+const Destructible = require('destructible')
+const Turnstile = require('turnstile')
 
-// A fast 32-bit hash with pretty good avalanche.
-const fnv = require('hash.fnv')
+let _
 
-// An `async`/`await` message queue.
-const Avenue = require('avenue')
+const PAUSED = Symbol('PAUSED')
+const CREATED = Symbol('CREATED')
+const WORKING = Symbol('WORKING')
+const WAITING = Symbol('WAITING')
 
-// Return the first non-null value.
-const coalesce = require('extant')
+class Pause {
+    constructor (fracture, key, entries) {
+        this.fracture = fracture
+        this.key = key
+        this.entries = entries
+    }
 
-const noop = require('nop')
+    resume () {
+        Destructible.Error.assert(!this.fracture._countdown.turnstile.terminated, 'DESTROYED')
+        const queue = this.fracture._get(this.key)
+        if (queue.pauses.length != 0) {
+            queue.pauses.shift().resolve.call()
+        } else {
+            this.fracture._enqueue(this.key)
+        }
+    }
+}
 
-// A Turnstile that will distribute work to a fixed pool of workers according to
-// hashed value. The work ingress interface is the same as Turnstile as is the
-// worker interface. You can use Fracture with a Turnstile Queue, Set or Check
-// interface wrapper.
-//
-// `Fracture` depends on `Destructible` which I use in all my applications, so
-// you should use it in yours, but if not, you'll create need to create a single
-// `Destructible` instance as part of creating a `Fracture`.
-
-//
 class Fracture {
-    //
+    constructor (countdown, constructor, consumer, object) {
+        this._countdown = countdown
+        this._countdown.destructible.destruct(() => {
+            this._countdown.destructible.ephemeral($ => $(), 'shutdown', async () => {
+                await this.drain()
+                this._countdown.decrement()
+            })
+        })
+        this._constructor = constructor
+        this._consumer = consumer
+        this._object = object
+        this._entries = 0
+        this._vivifyer = new Vivifyer(() => {
+            this._entries++
+            return {
+                state: CREATED,
+                entry: Turnstile.NULL_ENTRY,
+                pauses: [],
+                entries: [ constructor() ]
+            }
+        })
+    }
 
-    // `const fracture = new Fracture(destructible, options)`
-    //
-    // Create a `Fracture` that will terminate when the given `destructible`
-    // terminates. The `options` are as follows.
-    //
-    // Entries in the queue for longer than the `timeout` value will be marked
-    // as `timedout` and `canceled` when they are submitted to the worker
-    // function. This is a load shedding strategy for the queue. If you use the
-    // timeout function you worker function should process timed out entries
-    // quickly, perhaps doing nothing at all in order to shed load.
-    //
-    // The timeout function does not cancel the worker function in any way. If
-    // your worker function performs an action that could block and cause a
-    // backlog, you should also use a timeout mechanism within the function.
-    // For example, if you perform an HTTP request you should timeout the HTTP
-    // request using the timeout property of the HTTP client.
-    //
-    //
-    //  * `turnstiles` &mdash; the number of worker functions instances to
-    //  start.
-    //  * `timeout` &mdash; mark an entry in the queue as timed out and canceled
-    //  if it has been waiting in the queue for longer than the timeout value.
+    _get (key) {
+        return this._vivifyer.get(Keyify.stringify(key))
+    }
 
-    //
-    constructor (destructible, options = {}) {
-        // Whether or not we've been terminated.
-        this.terminated = false
-        // Timeout for queue.
-        this.timeout = coalesce(options.timeout, Infinity)
-        // We can provide a mock `Date` for timeout debugging.
-        this._Date = coalesce(options.Date, Date)
-        // Count of turnstiles, i.e. worker functions.
-        const turnstiles = coalesce(options.turnstiles, 1)
-        // Health interface identical to the one in `Turnstile`.
-        this.health = { occupied: 0, waiting: 0, rejecting: 0, turnstiles }
-
-        // A promise used to track train of work queues.
-        this._drain = null
-        this._drained = noop
-
-        // Create our pool of workers.
-        this._turnstiles = []
-        for (let i = 0; i < turnstiles; i++) {
-            const turnstile = { queue: new Avenue, shifter: null }
-            turnstile.shifter = turnstile.queue.shifter()
-            this._turnstiles.push(turnstile)
-            destructible.durable([ 'turnstile', i ], this._turnstile(turnstile.shifter))
+    async pause (key) {
+        Destructible.Error.assert(!this._countdown.turnstile.terminated, 'DESTROYED')
+        const queue = this._get(key)
+        switch (queue.state) {
+        case WORKING:
+        case PAUSED: {
+                const pause = { promise: new Promise(resolve => _ = { resolve }), ..._ }
+                queue.pauses.push(pause)
+                await pause.promise
+            }
+        case CREATED:
+        case WAITING: {
+                queue.state = PAUSED
+                this._countdown.turnstile.unqueue(queue.entry)
+                if (queue.entries.length == 1) {
+                    queue.entries.push(this._constructor.call())
+                }
+            }
+            break
         }
-        //
-
-        // Create a queue of work that has timed out.
-        this._rejected = new Avenue
-        // Poll the rejectable queue for timed out work.
-        destructible.durable('rejector', this._rejector(this._rejected.shifter()))
-
-        // Hang onto the `Destructible` for the sake of `destroy()`.
-        this._destructible = destructible
+        return new Pause(this, key, queue.entries.slice(0))
     }
 
-    get size () {
-        return this.health.occupied + this.health.rejecting + this.health.waiting
+    enqueue (key) {
+        Destructible.Error.assert(!this._countdown.turnstile.terminated, 'DESTROYED')
+        const queue = this._get(key)
+        switch (queue.state) {
+        case CREATED: {
+                this._enqueue(key)
+            }
+            break
+        case WORKING: {
+                if (queue.entries.length == 1) {
+                    queue.entries.push(this._constructor.call())
+                }
+            }
+            break
+        }
+        return queue.entries[queue.entries.length - 1]
     }
-
-    // Confused at the moment about how to wind up a streaming object that
-    // depends on Destructible. Let's recall that we don't want to assume that
-    // the user is done with us. Maybe they want to send a final message to all
-    // the streams (which we don't do, but we could) and have it wind down that
-    // way.
-
     //
-    drain () {
-        if (this._drain == null) {
-            this._drain = new Promise(resolve => this._drained = resolve)
-        }
-        const drain = this._drain
-        this._checkDrain()
-        return drain
-    }
-
-    terminate () {
-        this.terminated = true
-        for (const turnstile of this._turnstiles) {
-            turnstile.queue.push(null)
-        }
-        this._rejected.push(null)
-        return this.drain()
-    }
 
     _checkDrain () {
-        if (this._drain != null && this.size == 0) {
+        if (this._drain != null) {
+            this._drain.resolve()
             this._drain = null
-            const drained = this._drained
-            this._drained = noop
-            drained.call()
         }
     }
 
-    // `fracture._turnstile(shifter)` &mdash; a single instance of a worker
-    // function. It runs for the lifetime of this `Fracture`, pulling work off
-    // of a work queue and `await`ing work when there is none available.
+    // We do not provide any sort of return from enqueue. If the user wants to
+    // turn a value they can construct a `Promise` in their entry.
 
     //
-    async _turnstile (shifter) {
-        try {
-            this.health.occupied++
-            for (;;) {
-                // Sync `shift` returns `null` for at tail and end of stream,
-                // but async shift only returns null at end of stream. We'll
-                // know which sort of `null` it is when we call async `shift`.
-                let entry = shifter.sync.shift()
-                if (entry == null) {
-                    this.health.occupied--
+    _enqueue (key) {
+        const queue = this._get(key)
+        queue.state = WAITING
+        queue.entry = this._countdown.turnstile.enter({}, async () => {
+            queue.enqueued = false
+            if (queue.state == WAITING) {
+                queue.state = WORKING
+                const value = queue.entries[0]
+                try {
+                    await this._consumer.call(this._object, { key, value })
+                } catch (error) {
+                    this._destroyed = true
                     this._checkDrain()
-                    entry = await shifter.shift()
-                    this.health.occupied++
+                    throw error
                 }
-                if (entry == null) {
-                    break
+                queue.entries.shift()
+                if (queue.pauses.length != 0) {
+                    queue.pauses.shift().resolve.call()
+                } else if (queue.entries.length != 0) {
+                    this._enqueue(key)
+                } else {
+                    this._vivifyer.remove(key)
+                    if (--this._entries == 0) {
+                        this._checkDrain()
+                    }
                 }
-                this.health.waiting--
-                const now = this._Date.now()
-                const timedout = entry.timesout < now
-                const waited = now - entry.when
-                const canceled = this.terminated || timedout
-                await entry.method.call(entry.object, {
-                    body: entry.body,
-                    when: entry.when,
-                    waited: now - entry.when,
-                    timedout: timedout,
-                    canceled: canceled,
-                    vargs: entry.vargs
-                })
             }
-        } finally {
-            this.health.occupied--
-            this._checkDrain()
-        }
+        })
     }
 
-    // `fracture._rejector(shifter)` &mdash; invoke worker function with a timed
-    // out state.
-    //
-    //  * `shifter` &mdash; shifter for rejected queue.
-    //
-    // **TODO**: Should have you have a rejector in fracture? You added a
-    // rejector to Turnstile to prune the backlog of the worker function is
-    // blocking, but with Fracture you intend to have each worker function
-    // process a sub-queue hashed by a key in order. The rejector is its own
-    // queue and items would be processed in some arbitrary order.
-    //
-    // **TODO**: What is the alternative though? If you push onto the queue and
-    // it blocked, so you instead raise an exception? Or maybe return false and
-    // let the client handle it?
-    //
-    // When we call this function, we've already asserted that the entry in
-    // question has expired, so do not repeat the test.
-
-    //
-    async _rejector (shifter) {
-        try {
-            this.health.rejecting++
-            for (;;) {
-                let entry = shifter.sync.shift()
-                if (entry == null) {
-                    this.health.rejecting--
-                    this._checkDrain()
-                    entry = await shifter.shift()
-                    this.health.rejecting++
-                }
-                if (entry == null) {
-                    break
-                }
-                this.health.waiting--
-                const now = this._Date.now()
-                await entry.method.call(entry.object, {
-                    body: entry.body,
-                    when: entry.when,
-                    waited: now - entry.when,
-                    timedout: true ,
-                    canceled: true,
-                    vargs: entry.vargs
-                })
+    async drain () {
+        while (!this._destroyed && this._entries != 0) {
+            if (this._drain == null) {
+                this._drain = { promise: new Promise(resolve => _ = { resolve }), ..._ }
             }
-        } finally {
-            // The only statement that throws above is the worker function call.
-            this.health.rejecting--
-            this._checkDrain()
-        }
-    }
-
-    // `fracture.enter(entry, body[, object][, when])` &mdash; push a work entry
-    // into the work queue.
-    //
-    //  * `method` &mdash; the work function to call.
-    //  * `body` &mdash; argument to pass to the work function.
-    //  * `object` &mdash; optional context object for the work function call.
-    //  * `when` &mdash; optional submission time for the work.
-    //
-    // The `method` is invoked with the optional `object` as the `this`
-    // property and with the given given `body` as the first argument to the
-    // work method. The work method will receive a state argument as the final
-    // argument to the function.
-
-    //
-    enter ({ method, body, when, object, vargs }) {
-        assert(!this.terminated, 'enter when terminated')
-        // Increment wiating count.
-        this.health.waiting++
-        // Pop and shift variadic arguments.
-        const now = when || this._Date.now()
-        const index = coalesce(vargs[0], 0)
-        // TODO This is now dubious, we used it when Fracture was composed of
-        // Turnstiles but now Fracture is it's own thing.
-        // Hash out a turnstile.
-        const turnstile = this._turnstiles[index]
-        // Push the work into the turnstile.
-        turnstile.queue.push({ method, object, when: now, body, timesout: now + this.timeout, vargs })
-        // We check for rejections on entry assuming that if we've managed to
-        // make a list a certain length, there is no harm in leaving it that
-        // length for however long it takes for us to detect that it is
-        // struggling.
-        for (;;) {
-            const peek = turnstile.shifter.sync.peek()
-            if (peek == null || now < peek.timesout) {
-                break
-            }
-            this._rejected.push(turnstile.shifter.sync.shift())
+            await this._drain.promise
         }
     }
 }

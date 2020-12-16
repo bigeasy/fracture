@@ -24,16 +24,19 @@
                             "avenue":                       "0.4.0",
                             "extant":                       "^1.0.20",
                             "hash.fnv":                     "^1.0.8",
-                            "nop":                          "1.0.0"
+                            "turnstile":                    "6.0.0-alpha.32",
+                            "nop":                          "1.0.0",
+                            "vivifyer":                     "2.0.3"
     },
     "devDependencies":
     {
-                            "destructible":                 "5.2.0-alpha.5",
-                            "proof":                        "^9.0.2"
+                            "destructible":                 "7.0.0-alpha.16",
+                            "proof":                        "^9.0.2",
+                            "rescue":                       "7.0.0-alpha.3"
     },
     "main":                 "fracture",
     "scripts":
     {
-                            "test": "proof test/*.test.js"
+                            "test": "proof test/*.t.js"
     }
 }
