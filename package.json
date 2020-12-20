@@ -21,10 +21,10 @@
     },
     "dependencies":
     {
-                            "avenue":                       "0.4.0",
+                            "avenue":                       "0.4.1",
                             "extant":                       "^1.0.20",
                             "hash.fnv":                     "^1.0.8",
-                            "turnstile":                    "6.0.0-alpha.32",
+                            "turnstile":                    "6.0.0-alpha.33",
                             "nop":                          "1.0.0",
                             "vivifyer":                     "2.0.3"
     },
