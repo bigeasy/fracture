@@ -1,6 +1,6 @@
 {
     "name":                 "fracture",
-    "version":              "0.3.0-alpha.7",
+    "version":              "0.3.0-alpha.8",
     "description":
 
       "A error-first callback work queue that splits work on a hashed key.",
@@ -24,8 +24,8 @@
                             "avenue":                       "0.4.1",
                             "extant":                       "^1.0.20",
                             "hash.fnv":                     "^1.0.8",
-                            "turnstile":                    "6.0.0-alpha.33",
                             "nop":                          "1.0.0",
+                            "turnstile":                    "6.0.0-alpha.33",
                             "vivifyer":                     "2.0.3"
     },
     "devDependencies":
