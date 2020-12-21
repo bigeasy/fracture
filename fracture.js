@@ -19,7 +19,7 @@ class Pause {
     }
 
     resume () {
-        Destructible.Error.assert(!this.fracture._countdown.turnstile.terminated, 'DESTROYED')
+        Destructible.Error.assert(!this.fracture.turnstile.terminated, 'DESTROYED')
         const queue = this.fracture._get(this.key)
         if (queue.pauses.length != 0) {
             queue.pauses.shift().resolve.call()
@@ -30,18 +30,26 @@ class Pause {
 }
 
 class Fracture {
-    constructor (countdown, constructor, consumer, object) {
-        this._countdown = countdown
-        this._countdown.destructible.destruct(() => {
-            this._countdown.destructible.ephemeral($ => $(), 'shutdown', async () => {
+    constructor (counter, constructor, consumer, object) {
+        this.turnstile = counter.counted.turnstile
+
+        this.counted = { fracture: this }
+        this.countdown = counter.countdown
+        this.destructible = counter.destructible.durable('counters')
+
+        this._counter = counter
+        this._counter.destructible.destruct(() => {
+            this._counter.destructible.ephemeral($ => $(), 'shutdown', async () => {
                 await this.drain()
-                this._countdown.decrement()
+                this._counter.decrement()
             })
         })
+
         this._constructor = constructor
         this._consumer = consumer
         this._object = object
         this._entries = 0
+        this._destroyed = false
         this._vivifyer = new Vivifyer(() => {
             this._entries++
             return {
@@ -58,7 +66,7 @@ class Fracture {
     }
 
     async pause (key) {
-        Destructible.Error.assert(!this._countdown.turnstile.terminated, 'DESTROYED')
+        Destructible.Error.assert(!this.turnstile.terminated, 'DESTROYED')
         const queue = this._get(key)
         switch (queue.state) {
         case WORKING:
@@ -70,7 +78,7 @@ class Fracture {
         case CREATED:
         case WAITING: {
                 queue.state = PAUSED
-                this._countdown.turnstile.unqueue(queue.entry)
+                this.turnstile.unqueue(queue.entry)
                 if (queue.entries.length == 1) {
                     queue.entries.push(this._constructor.call())
                 }
@@ -81,7 +89,7 @@ class Fracture {
     }
 
     enqueue (key) {
-        Destructible.Error.assert(!this._countdown.turnstile.terminated, 'DESTROYED')
+        Destructible.Error.assert(!this.turnstile.terminated, 'DESTROYED')
         const queue = this._get(key)
         switch (queue.state) {
         case CREATED: {
@@ -113,7 +121,7 @@ class Fracture {
     _enqueue (key) {
         const queue = this._get(key)
         queue.state = WAITING
-        queue.entry = this._countdown.turnstile.enter({}, async () => {
+        queue.entry = this.turnstile.enter({}, async () => {
             queue.enqueued = false
             if (queue.state == WAITING) {
                 queue.state = WORKING

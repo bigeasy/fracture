@@ -16,7 +16,8 @@ require('proof')(3, async okay => {
         const destructible = new Destructible($ => $(), 'fracture')
         const turnstile = new Turnstile(destructible)
 
-        const fracture = new Fracture(turnstile.countdown($ => $(), 'fracture'), () => ({
+        const counter = Destructible.counter($ => $(), 'fracture', turnstile)
+        const fracture = new Fracture(counter, () => ({
             work: false
         }), async ({ key, value }) => {
             console.log(key, value)
@@ -45,7 +46,8 @@ require('proof')(3, async okay => {
         const destructible = new Destructible($ => $(), 'fracture')
         const turnstile = new Turnstile(destructible)
 
-        const fracture = new Fracture(turnstile.countdown($ => $(), 'fracture'), () => ({
+        const counter = Destructible.counter($ => $(), 'fracture', turnstile)
+        const fracture = new Fracture(counter, () => ({
             work: false
         }), async ({ key, value }) => {
             throw new Error('thrown')
