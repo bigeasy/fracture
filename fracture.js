@@ -35,6 +35,7 @@ class Fracture {
         assert(turnstile.destructible.isSameStage(destructible))
 
         this.turnstile = turnstile
+        this.turnstile.countdown.increment()
 
         this.destructible = destructible
 
