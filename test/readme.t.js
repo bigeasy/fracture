@@ -91,8 +91,7 @@ require('proof')(11, async okay => {
         // the `this` property of the function when it is called.
 
         //
-        const counter = Destructible.counter($ => $(), 'fracture', turnstile)
-        const fracture = new Fracture(counter, () => [], worker.work, worker)
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => [], worker.work, worker)
         //
 
         // Now we can queue some work. When we call enqueue we will get back an
@@ -173,8 +172,7 @@ require('proof')(11, async okay => {
         const destructible = new Destructible($ => $(), 'fracture')
         const turnstile = new Turnstile(destructible)
 
-        const counter = Destructible.counter($ => $(), 'fracture', turnstile)
-        const fracture = new Fracture(counter, () => ({ work: [], entered: false }), async ({ value }) => {
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({ work: [], entered: false }), async ({ value }) => {
             value.entered = true
             for (const timeout of value.work) {
                 await new Promise(resolve => setTimeout(resolve, timeout))
@@ -272,8 +270,7 @@ require('proof')(11, async okay => {
         // work function.
 
         //
-        const counter = Destructible.counter($ => $(), 'fracture', turnstile)
-        const fracture = new Fracture(counter, () => ({ entered: false, number: 0 }), async ({ value }) => {
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({ entered: false, number: 0 }), async ({ value }) => {
             value.entered = true
         })
         //
@@ -342,8 +339,7 @@ require('proof')(11, async okay => {
         //
         let sum = 0
 
-        const counter = Destructible.counter($ => $(), 'fracture', turnstile)
-        const fracture = new Fracture(counter, () => ({
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({
             entered: latch(), block: null, work: 0
         }), async ({ key, value }) => {
             value.entered.resolve()

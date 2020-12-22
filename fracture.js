@@ -1,6 +1,7 @@
+const assert = require('assert')
+
 const Keyify = require('keyify')
 const Vivifyer = require('vivifyer')
-const assert = require('assert')
 const Destructible = require('destructible')
 const Turnstile = require('turnstile')
 
@@ -30,18 +31,17 @@ class Pause {
 }
 
 class Fracture {
-    constructor (counter, constructor, consumer, object) {
-        this.turnstile = counter.counted.turnstile
+    constructor (destructible, turnstile, constructor, consumer, object) {
+        assert(turnstile.destructible.isSameStage(destructible))
 
-        this.counted = { fracture: this }
-        this.countdown = counter.countdown
-        this.destructible = counter.destructible.durable('counters')
+        this.turnstile = turnstile
 
-        this._counter = counter
-        this._counter.destructible.destruct(() => {
-            this._counter.destructible.ephemeral($ => $(), 'shutdown', async () => {
+        this.destructible = destructible
+
+        this.destructible.destruct(() => {
+            this.destructible.ephemeral($ => $(), 'shutdown', async () => {
                 await this.drain()
-                this._counter.decrement()
+                this.turnstile.countdown.decrement()
             })
         })
 

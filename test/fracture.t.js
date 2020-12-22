@@ -13,14 +13,12 @@ require('proof')(3, async okay => {
     }
 
     {
-        const destructible = new Destructible($ => $(), 'fracture')
+        const destructible = new Destructible($ => $(), 5000, 'fracture')
         const turnstile = new Turnstile(destructible)
 
-        const counter = Destructible.counter($ => $(), 'fracture', turnstile)
-        const fracture = new Fracture(counter, () => ({
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({
             work: false
         }), async ({ key, value }) => {
-            console.log(key, value)
             if (key === 'a' && value.work) {
                 const pause = await fracture.pause('b')
                 const promise = fracture.pause('b')
@@ -39,6 +37,7 @@ require('proof')(3, async okay => {
         for (const promise of [ fracture.drain(), fracture.drain() ]) {
             await promise
         }
+
         await destructible.destroy().rejected
     }
 
@@ -46,8 +45,7 @@ require('proof')(3, async okay => {
         const destructible = new Destructible($ => $(), 'fracture')
         const turnstile = new Turnstile(destructible)
 
-        const counter = Destructible.counter($ => $(), 'fracture', turnstile)
-        const fracture = new Fracture(counter, () => ({
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({
             work: false
         }), async ({ key, value }) => {
             throw new Error('thrown')
@@ -60,6 +58,7 @@ require('proof')(3, async okay => {
         for (const promise of [ fracture.drain(), fracture.drain() ]) {
             await promise
         }
+
         try {
             await destructible.destroy().rejected
         } catch (error) {
