@@ -49,10 +49,10 @@ class Fracture {
         this._constructor = constructor
         this._consumer = consumer
         this._object = object
-        this._entries = 0
+        this.count = 0
         this._destroyed = false
         this._vivifyer = new Vivifyer(() => {
-            this._entries++
+            this.count++
             return {
                 state: CREATED,
                 entry: Turnstile.NULL_ENTRY,
@@ -141,7 +141,7 @@ class Fracture {
                     this._enqueue(key)
                 } else {
                     this._vivifyer.remove(key)
-                    if (--this._entries == 0) {
+                    if (--this.count == 0) {
                         this._checkDrain()
                     }
                 }
@@ -150,7 +150,7 @@ class Fracture {
     }
 
     async drain () {
-        while (!this._destroyed && this._entries != 0) {
+        while (!this._destroyed && this.count != 0) {
             if (this._drain == null) {
                 this._drain = { promise: new Promise(resolve => _ = { resolve }), ..._ }
             }
