@@ -122,13 +122,13 @@ class Fracture {
     _enqueue (key) {
         const queue = this._get(key)
         queue.state = WAITING
-        queue.entry = this.turnstile.enter({}, async () => {
+        queue.entry = this.turnstile.enter({}, async entry => {
             queue.enqueued = false
             if (queue.state == WAITING) {
                 queue.state = WORKING
                 const value = queue.entries[0]
                 try {
-                    await this._consumer.call(this._object, { key, value })
+                    await this._consumer.call(this._object, { ...entry, key, value })
                 } catch (error) {
                     this._destroyed = true
                     this._checkDrain()
