@@ -50,7 +50,6 @@ class Fracture {
         this._consumer = consumer
         this._object = object
         this.count = 0
-        this._destroyed = false
         this._vivifyer = new Vivifyer(() => {
             this.count++
             return {
@@ -129,20 +128,17 @@ class Fracture {
                 const value = queue.entries[0]
                 try {
                     await this._consumer.call(this._object, { ...entry, key, value })
-                } catch (error) {
-                    this._destroyed = true
-                    this._checkDrain()
-                    throw error
-                }
-                queue.entries.shift()
-                if (queue.pauses.length != 0) {
-                    queue.pauses.shift().resolve.call()
-                } else if (queue.entries.length != 0) {
-                    this._enqueue(key)
-                } else {
-                    this._vivifyer.remove(key)
-                    if (--this.count == 0) {
-                        this._checkDrain()
+                } finally {
+                    queue.entries.shift()
+                    if (queue.pauses.length != 0) {
+                        queue.pauses.shift().resolve.call()
+                    } else if (queue.entries.length != 0) {
+                        this._enqueue(key)
+                    } else {
+                        this._vivifyer.remove(key)
+                        if (--this.count == 0) {
+                            this._checkDrain()
+                        }
                     }
                 }
             }
@@ -150,7 +146,7 @@ class Fracture {
     }
 
     async drain () {
-        while (!this._destroyed && this.count != 0) {
+        while (this.count != 0) {
             if (this._drain == null) {
                 this._drain = { promise: new Promise(resolve => _ = { resolve }), ..._ }
             }
