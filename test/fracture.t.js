@@ -66,4 +66,25 @@ require('proof')(3, async okay => {
             okay(errors.length, 2, 'caught an error for each bit of work')
         }
     }
+
+    {
+        const destructible = new Destructible($ => $(), 5000, 'fracture')
+        const turnstile = new Turnstile(destructible)
+
+        const gathered = []
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({
+            work: []
+        }), async ({ key, value }) => {
+            gathered.push.apply(gathered, value.work)
+        })
+
+        fracture.enqueue('a').work.push('a')
+
+        await fracture.drain()
+
+        const pause = await fracture.pause('a')
+        pause.resume()
+
+        await destructible.destroy().rejected
+    }
 })

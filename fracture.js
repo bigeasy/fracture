@@ -79,8 +79,8 @@ class Fracture {
         case WAITING: {
                 queue.state = PAUSED
                 this.turnstile.unqueue(queue.entry)
-                if (queue.entries.length == 1) {
-                    queue.entries.push(this._constructor.call())
+                while (queue.entries.length < 2) {
+                    queue.entries.push(this._constructor.call(null, key))
                 }
             }
             break
@@ -135,7 +135,7 @@ class Fracture {
                     } else if (queue.entries.length != 0) {
                         this._enqueue(key)
                     } else {
-                        this._vivifyer.remove(key)
+                        this._vivifyer.remove(Keyify.stringify(key))
                         if (--this.count == 0) {
                             this._checkDrain()
                         }
