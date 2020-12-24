@@ -50,13 +50,13 @@ class Fracture {
         this._consumer = consumer
         this._object = object
         this.count = 0
-        this._vivifyer = new Vivifyer(() => {
+        this._vivifyer = new Vivifyer(id => {
             this.count++
             return {
                 state: CREATED,
                 entry: Turnstile.NULL_ENTRY,
                 pauses: [],
-                entries: [ constructor() ]
+                entries: [ constructor(Keyify.parse(id)) ]
             }
         })
     }
