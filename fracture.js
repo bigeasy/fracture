@@ -98,7 +98,7 @@ class Fracture {
             break
         case WORKING: {
                 if (queue.entries.length == 1) {
-                    queue.entries.push(this._constructor.call())
+                    queue.entries.push(this._constructor.call(null, key))
                 }
             }
             break
