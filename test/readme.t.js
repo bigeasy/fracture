@@ -1,4 +1,4 @@
-require('proof')(11, async okay => {
+require('proof')(10, async okay => {
     const Fracture = require('..')
     //
 
@@ -289,7 +289,6 @@ require('proof')(11, async okay => {
         //
         const pause = await fracture.pause('a')
         okay(pause.entries[0], { entered: false, number: 7 }, 'first pause entry')
-        okay(pause.entries[1], { entered: false, number: 0 }, 'second pause entry')
         //
 
         //
