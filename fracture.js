@@ -79,7 +79,7 @@ class Fracture {
         case WAITING: {
                 queue.state = PAUSED
                 this.turnstile.unqueue(queue.entry)
-                while (queue.entries.length < 2) {
+                if (queue.entries.length == 0) {
                     queue.entries.push(this._constructor.call(null, key))
                 }
             }
