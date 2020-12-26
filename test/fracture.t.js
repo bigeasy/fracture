@@ -38,7 +38,7 @@ require('proof')(3, async okay => {
             await promise
         }
 
-        await destructible.destroy().rejected
+        await destructible.destroy().promise
     }
 
     {
@@ -60,7 +60,7 @@ require('proof')(3, async okay => {
         }
 
         try {
-            await destructible.destroy().rejected
+            await destructible.destroy().promise
         } catch (error) {
             const errors = rescue(error, [ [ 0 ], 'thrown' ]).errors
             okay(errors.length, 2, 'caught an error for each bit of work')
@@ -85,6 +85,6 @@ require('proof')(3, async okay => {
         const pause = await fracture.pause('a')
         pause.resume()
 
-        await destructible.destroy().rejected
+        await destructible.destroy().promise
     }
 })

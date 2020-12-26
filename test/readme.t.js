@@ -165,7 +165,7 @@ require('proof')(10, async okay => {
         // shut down.
 
         //
-        await destructible.destroy().rejected
+        await destructible.destroy().promise
     }
 
     {
@@ -218,7 +218,7 @@ require('proof')(10, async okay => {
         // down.
 
         //
-        await destructible.destroy().rejected
+        await destructible.destroy().promise
     }
     //
 
@@ -320,7 +320,7 @@ require('proof')(10, async okay => {
         // Proceed with an orderly shutdown.
 
         //
-        await destructible.destroy().rejected
+        await destructible.destroy().promise
     }
 
     {
@@ -378,6 +378,6 @@ require('proof')(10, async okay => {
 
         //
         await fracture.drain()
-        await destructible.destroy().rejected
+        await destructible.destroy().promise
     }
 })

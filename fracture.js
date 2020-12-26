@@ -32,17 +32,20 @@ class Pause {
 
 class Fracture {
     constructor (destructible, turnstile, constructor, consumer, object) {
-        assert(turnstile.destructible.isSameStage(destructible))
+        assert(destructible.isDestroyedIfDestroyed(turnstile.destructible))
 
         this.turnstile = turnstile
-        this.turnstile.countdown.increment()
+        this.turnstile.deferrable.increment()
 
         this.destructible = destructible
+        this.deferrable = destructible.durable($ => $(), 'deferrable', 1)
 
-        this.destructible.destruct(() => {
-            this.destructible.ephemeral($ => $(), 'shutdown', async () => {
+        this.destructible.destruct(() => this.deferrable.decrement())
+
+        this.deferrable.destruct(() => {
+            this.deferrable.ephemeral($ => $(), 'shutdown', async () => {
                 await this.drain()
-                this.turnstile.countdown.decrement()
+                this.turnstile.deferrable.decrement()
             })
         })
 
