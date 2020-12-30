@@ -24,8 +24,14 @@ class Pause {
         const queue = this.fracture._get(this.key)
         if (queue.pauses.length != 0) {
             queue.pauses.shift().resolve.call()
-        } else {
+        } else if (queue.entries.length != 0) {
             this.fracture._enqueue(this.key)
+        } else {
+            this.fracture._vivifyer.remove(Keyify.stringify(this.key))
+            console.log(this.fracture.count)
+            if (--this.fracture.count == 0) {
+                this.fracture._checkDrain()
+            }
         }
     }
 }
@@ -59,7 +65,7 @@ class Fracture {
                 state: CREATED,
                 entry: Turnstile.NULL_ENTRY,
                 pauses: [],
-                entries: [ constructor(key) ]
+                entries: []
             }
         })
     }
@@ -82,9 +88,6 @@ class Fracture {
         case WAITING: {
                 queue.state = PAUSED
                 this.turnstile.unqueue(queue.entry)
-                if (queue.entries.length == 0) {
-                    queue.entries.push(this._constructor.call(null, key))
-                }
             }
             break
         }
@@ -94,17 +97,11 @@ class Fracture {
     enqueue (key) {
         Destructible.Error.assert(!this.turnstile.terminated, 'DESTROYED')
         const queue = this._get(key)
-        switch (queue.state) {
-        case CREATED: {
-                this._enqueue(key)
-            }
-            break
-        case WORKING: {
-                if (queue.entries.length == 1) {
-                    queue.entries.push(this._constructor.call(null, key))
-                }
-            }
-            break
+        if (queue.state == CREATED) {
+            this._enqueue(key)
+        }
+        if (queue.entries.length == 0) {
+            queue.entries.push(this._constructor.call(null, key))
         }
         return queue.entries[queue.entries.length - 1]
     }
@@ -128,7 +125,7 @@ class Fracture {
             queue.enqueued = false
             if (queue.state == WAITING) {
                 queue.state = WORKING
-                const value = queue.entries[0]
+                const value = queue.entries.shift()
                 try {
                     await this._consumer.call(this._object, { ...entry, key, value })
                 } finally {
@@ -139,6 +136,7 @@ class Fracture {
                         this._enqueue(key)
                     } else {
                         this._vivifyer.remove(Keyify.stringify(key))
+                        console.log(this.count, this._vivifyer.map)
                         if (--this.count == 0) {
                             this._checkDrain()
                         }
