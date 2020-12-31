@@ -28,7 +28,6 @@ class Pause {
             this.fracture._enqueue(this.key)
         } else {
             this.fracture._vivifyer.remove(Keyify.stringify(this.key))
-            console.log(this.fracture.count)
             if (--this.fracture.count == 0) {
                 this.fracture._checkDrain()
             }
@@ -80,6 +79,7 @@ class Fracture {
         switch (queue.state) {
         case WORKING:
         case PAUSED: {
+                console.log('pause', key)
                 const pause = { promise: new Promise(resolve => _ = { resolve }), ..._ }
                 queue.pauses.push(pause)
                 await pause.promise
@@ -129,14 +129,12 @@ class Fracture {
                 try {
                     await this._consumer.call(this._object, { ...entry, key, value })
                 } finally {
-                    queue.entries.shift()
                     if (queue.pauses.length != 0) {
                         queue.pauses.shift().resolve.call()
                     } else if (queue.entries.length != 0) {
                         this._enqueue(key)
                     } else {
                         this._vivifyer.remove(Keyify.stringify(key))
-                        console.log(this.count, this._vivifyer.map)
                         if (--this.count == 0) {
                             this._checkDrain()
                         }
