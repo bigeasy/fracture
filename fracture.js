@@ -79,7 +79,6 @@ class Fracture {
         switch (queue.state) {
         case WORKING:
         case PAUSED: {
-                console.log('pause', key)
                 const pause = { promise: new Promise(resolve => _ = { resolve }), ..._ }
                 queue.pauses.push(pause)
                 await pause.promise
