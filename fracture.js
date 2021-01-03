@@ -4,8 +4,7 @@ const Keyify = require('keyify')
 const Vivifyer = require('vivifyer')
 const Destructible = require('destructible')
 const Turnstile = require('turnstile')
-
-let _
+const Future = require('perhaps')
 
 const PAUSED = Symbol('PAUSED')
 const CREATED = Symbol('CREATED')
@@ -23,7 +22,7 @@ class Pause {
         this.fracture.deferrable.operational()
         const queue = this.fracture._get(this.key)
         if (queue.pauses.length != 0) {
-            queue.pauses.shift().resolve.call()
+            queue.pauses.shift().resolve()
         } else if (queue.entries.length != 0) {
             this.fracture._enqueue(this.key)
         } else {
@@ -80,7 +79,7 @@ class Fracture {
         switch (queue.state) {
         case WORKING:
         case PAUSED: {
-                const pause = { promise: new Promise(resolve => _ = { resolve }), ..._ }
+                const pause = new Future
                 queue.pauses.push(pause)
                 await pause.promise
             }
@@ -130,7 +129,7 @@ class Fracture {
                     await this._consumer.call(this._object, { ...entry, key, value })
                 } finally {
                     if (queue.pauses.length != 0) {
-                        queue.pauses.shift().resolve.call()
+                        queue.pauses.shift().resolve()
                     } else if (queue.entries.length != 0) {
                         this._enqueue(key)
                     } else {
@@ -147,7 +146,7 @@ class Fracture {
     async drain () {
         while (this.count != 0) {
             if (this._drain == null) {
-                this._drain = { promise: new Promise(resolve => _ = { resolve }), ..._ }
+                this._drain = new Future
             }
             await this._drain.promise
         }
