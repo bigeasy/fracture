@@ -20,7 +20,7 @@ class Pause {
     }
 
     resume () {
-        Destructible.Error.assert(!this.fracture.turnstile.terminated, 'DESTROYED')
+        this.fracture.deferrable.operational()
         const queue = this.fracture._get(this.key)
         if (queue.pauses.length != 0) {
             queue.pauses.shift().resolve.call()
@@ -43,6 +43,7 @@ class Fracture {
         this.turnstile.deferrable.increment()
 
         this.destructible = destructible
+
         this.deferrable = destructible.durable($ => $(), 'deferrable', 1)
 
         this.destructible.destruct(() => this.deferrable.decrement())
@@ -74,7 +75,7 @@ class Fracture {
     }
 
     async pause (key) {
-        Destructible.Error.assert(!this.turnstile.terminated, 'DESTROYED')
+        this.deferrable.operational()
         const queue = this._get(key)
         switch (queue.state) {
         case WORKING:
@@ -94,7 +95,7 @@ class Fracture {
     }
 
     enqueue (key) {
-        Destructible.Error.assert(!this.turnstile.terminated, 'DESTROYED')
+        this.deferrable.operational()
         const queue = this._get(key)
         if (queue.state == CREATED) {
             this._enqueue(key)
