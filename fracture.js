@@ -155,7 +155,6 @@ class Fracture {
                     }
                     await this._drain.promise
                 }
-                return null
             }) ()
         }
         return null
