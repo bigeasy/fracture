@@ -28,7 +28,7 @@ class Pause {
         } else {
             this.fracture._vivifyer.remove(Keyify.stringify(this.key))
             if (--this.fracture.count == 0) {
-                this.fracture._checkDrain()
+                this.fracture._drain.resolve()
             }
         }
     }
@@ -57,6 +57,9 @@ class Fracture {
         this._constructor = constructor
         this._consumer = consumer
         this._object = object
+
+        this._drain = new Future({ resolution: [] })
+
         this.count = 0
         this._vivifyer = new Vivifyer((_, key) => {
             this.count++
@@ -135,7 +138,7 @@ class Fracture {
                     } else {
                         this._vivifyer.remove(Keyify.stringify(key))
                         if (--this.count == 0) {
-                            this._checkDrain()
+                            this._drain.resolve()
                         }
                     }
                 }
@@ -143,13 +146,19 @@ class Fracture {
         })
     }
 
-    async drain () {
-        while (this.count != 0) {
-            if (this._drain == null) {
-                this._drain = new Future
-            }
-            await this._drain.promise
+    drain () {
+        if (this.count != 0) {
+            return (async () => {
+                while (this.count != 0) {
+                    if (this._drain.fulfilled) {
+                        this._drain = new Future
+                    }
+                    await this._drain.promise
+                }
+                return null
+            }) ()
         }
+        return null
     }
 }
 
