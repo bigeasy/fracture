@@ -43,7 +43,7 @@ class Fracture {
 
         this.destructible = destructible
 
-        this.deferrable = destructible.durable($ => $(), 'deferrable', 1)
+        this.deferrable = destructible.durable($ => $(), 'deferrable', { countdown: 1 })
 
         this.destructible.destruct(() => this.deferrable.decrement())
 
