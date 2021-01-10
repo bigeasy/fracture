@@ -35,7 +35,7 @@ class Pause {
 }
 
 class Fracture {
-    constructor (destructible, turnstile, constructor, consumer, object) {
+    constructor (destructible, { turnstile, entry, worker }) {
         assert(destructible.isDestroyedIfDestroyed(turnstile.destructible))
 
         this.turnstile = turnstile
@@ -45,20 +45,23 @@ class Fracture {
 
         this.deferrable = destructible.durable($ => $(), 'deferrable', { countdown: 1 })
 
-        this.destructible.destruct(() => this.deferrable.decrement())
-
-        this.deferrable.destruct(() => {
-            this.deferrable.ephemeral($ => $(), 'shutdown', async () => {
-                await this.drain()
-                this.turnstile.deferrable.decrement()
+        this.destructible.destruct(() => {
+            this.destructible.ephemeral($ => $(), 'shutdown', async () => {
+                await this.destructible.copacetic('drain', null, async () => this.drain())
+                this._drain.resolve()
+                this.deferrable.decrement()
             })
         })
+        this.destructible.panic(() => this._drain.resolve())
 
-        this._constructor = constructor
-        this._consumer = consumer
-        this._object = object
+        this.deferrable.destruct(() => this.turnstile.deferrable.decrement())
 
-        this._drain = new Future({ resolution: [] })
+        this._entry = entry
+        this._worker = worker
+
+        this._drain = Future.resolve()
+
+        this._continuations = []
 
         this.count = 0
         this._vivifyer = new Vivifyer((_, key) => {
@@ -66,6 +69,7 @@ class Fracture {
             return {
                 state: CREATED,
                 entry: Turnstile.NULL_ENTRY,
+                continuations: [],
                 pauses: [],
                 entries: []
             }
@@ -96,24 +100,16 @@ class Fracture {
         return new Pause(this, key, queue.entries.slice(0))
     }
 
-    enqueue (key) {
+    enqueue (key, promise = null) {
         this.deferrable.operational()
         const queue = this._get(key)
-        if (queue.state == CREATED) {
+        if (queue.state == CREATED && queue.continuations.length == 0) {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
-            queue.entries.push(this._constructor.call(null, key))
+            queue.entries.push((this._entry)(key))
         }
         return queue.entries[queue.entries.length - 1]
-    }
-    //
-
-    _checkDrain () {
-        if (this._drain != null) {
-            this._drain.resolve()
-            this._drain = null
-        }
     }
 
     // We do not provide any sort of return from enqueue. If the user wants to
@@ -128,18 +124,22 @@ class Fracture {
             if (queue.state == WAITING) {
                 queue.state = WORKING
                 const value = queue.entries.shift()
-                try {
-                    await this._consumer.call(this._object, { ...entry, key, value })
-                } finally {
-                    if (queue.pauses.length != 0) {
-                        queue.pauses.shift().resolve()
-                    } else if (queue.entries.length != 0) {
+                const promise = queue.continuations.length == 0 ? null : queue.continuations.shift().promise
+                const continuation = await (this._worker)({ ...entry, key, value, promise })
+                if (continuation != null && typeof continuation == 'function') {
+                    const future = Future.capture(continuation(), future => {
+                        queue.entries.unshift(value)
                         this._enqueue(key)
-                    } else {
-                        this._vivifyer.remove(Keyify.stringify(key))
-                        if (--this.count == 0) {
-                            this._drain.resolve()
-                        }
+                    })
+                    queue.continuations.push(future)
+                } else if (queue.pauses.length != 0) {
+                    queue.pauses.shift().resolve()
+                } else if (queue.entries.length != 0) {
+                    this._enqueue(key)
+                } else {
+                    this._vivifyer.remove(Keyify.stringify(key))
+                    if (--this.count == 0) {
+                        this._drain.resolve()
                     }
                 }
             }
@@ -149,7 +149,7 @@ class Fracture {
     drain () {
         if (this.count != 0) {
             return (async () => {
-                while (this.count != 0) {
+                while (! this.deferrable.errored && this.count != 0) {
                     if (this._drain.fulfilled) {
                         this._drain = new Future
                     }

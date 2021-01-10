@@ -16,16 +16,20 @@ require('proof')(3, async okay => {
         const destructible = new Destructible($ => $(), 5000, 'fracture')
         const turnstile = new Turnstile(destructible)
 
-        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({
-            work: false
-        }), async ({ key, value }) => {
-            if (key === 'a' && value.work) {
-                const pause = await fracture.pause('b')
-                const promise = fracture.pause('b')
-                pause.resume()
-                {
-                    const pause = await promise
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
+            turnstile: turnstile,
+            entry: () => ({
+                work: false
+            }),
+            worker: async ({ key, value }) => {
+                if (key === 'a' && value.work) {
+                    const pause = await fracture.pause('b')
+                    const promise = fracture.pause('b')
                     pause.resume()
+                    {
+                        const pause = await promise
+                        pause.resume()
+                    }
                 }
             }
         })
@@ -45,10 +49,12 @@ require('proof')(3, async okay => {
         const destructible = new Destructible($ => $(), 'fracture')
         const turnstile = new Turnstile(destructible)
 
-        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({
-            work: false
-        }), async ({ key, value }) => {
-            throw new Error('thrown')
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
+            turnstile: turnstile,
+            entry: () => ({ work: false }),
+            worker: async ({ key, value }) => {
+                throw new Error('thrown')
+            }
         })
 
         fracture.enqueue('a').work = true
@@ -72,10 +78,10 @@ require('proof')(3, async okay => {
         const turnstile = new Turnstile(destructible)
 
         const gathered = []
-        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), turnstile, () => ({
-            work: []
-        }), async ({ key, value }) => {
-            gathered.push.apply(gathered, value.work)
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
+            turnstile: turnstile,
+            entry: () => ({ work: [] }),
+            worker: async ({ key, value }) => gathered.push.apply(gathered, value.work)
         })
 
         fracture.enqueue('a').work.push('a')
