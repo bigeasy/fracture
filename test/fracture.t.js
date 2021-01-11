@@ -47,7 +47,7 @@ require('proof')(3, async okay => {
 
     {
         const destructible = new Destructible($ => $(), 'fracture')
-        const turnstile = new Turnstile(destructible)
+        const turnstile = new Turnstile(destructible.durable($ => $(), 'turnstile'))
 
         const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
             turnstile: turnstile,
@@ -69,7 +69,7 @@ require('proof')(3, async okay => {
             await destructible.destroy().promise
         } catch (error) {
             const errors = rescue(error, [ [ 0 ], 'thrown' ]).errors
-            okay(errors.length, 2, 'caught an error for each bit of work')
+            okay(errors.length, 1, 'caught an error for each bit of work')
         }
     }
 

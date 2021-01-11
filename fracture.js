@@ -43,7 +43,7 @@ class Fracture {
 
         this.destructible = destructible
 
-        this.deferrable = destructible.durable($ => $(), 'deferrable', { countdown: 1 })
+        this.deferrable = destructible.durable($ => $(), { countdown: 1 }, 'deferrable')
 
         this.destructible.destruct(() => {
             this.destructible.ephemeral($ => $(), 'shutdown', async () => {
@@ -149,7 +149,7 @@ class Fracture {
     drain () {
         if (this.count != 0) {
             return (async () => {
-                while (! this.deferrable.errored && this.count != 0) {
+                while (! this.deferrable.destroyed && this.count != 0) {
                     if (this._drain.fulfilled) {
                         this._drain = new Future
                     }

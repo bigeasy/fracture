@@ -382,7 +382,9 @@ fan-out of work.
     //
     let sum = 0
 
-    const fracture = new Fracture(destructible.ephemeral('fracture'), {
+    const parallel = destructible.ephemeral('parallel')
+    const turnstile = new Turnstile(parallel.durable('turnstile'), { strands: 2 })
+    const fracture = new Fracture(parallel.durable('fracture'), {
         turnstile: turnstile,
         entry: () => ({
             entered: latch(), block: null, work: 0
@@ -425,7 +427,7 @@ fan-out of work.
     // Proceed with an orderly shutdown.
 
     //
-    await fracture.destructible.destroy().promise
+    await parallel.destroy().promise
 }
 ```
 

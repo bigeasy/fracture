@@ -25,12 +25,12 @@
                             "hash.fnv":                     "^1.0.8",
                             "nop":                          "1.0.0",
                             "perhaps":                      "0.0.6",
-                            "turnstile":                    "6.0.0-alpha.49",
+                            "turnstile":                    "6.0.0-alpha.50",
                             "vivifyer":                     "^2.1.0"
     },
     "devDependencies":
     {
-                            "destructible":                 "7.0.0-alpha.37",
+                            "destructible":                 "7.0.0-alpha.38",
                             "proof":                        "^9.0.2",
                             "rescue":                       "7.0.0-alpha.9"
     },
