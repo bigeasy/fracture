@@ -75,7 +75,7 @@ require('proof')(16, async okay => {
             entry: () => {
                 return { work: [] }
             },
-            worker: ({ key, value: { work } }) => {
+            worker: async ({ key, value: { work } }) => {
                 gathered.push({ key, work })
             }
         })
@@ -97,7 +97,7 @@ require('proof')(16, async okay => {
             work: [ 1, 2 ], key: 'a'
         }, {
             work: [ 3 ], key: 'b'
-        }], 'okay')
+        }], 'minimal example')
     }
 
     // In the example above, `work` is the application specific work queue. When we
@@ -144,7 +144,7 @@ require('proof')(16, async okay => {
             entry: () => {
                 return { work: [] }
             },
-            worker: ({ key, value: { work } }) => {
+            worker: async ({ key, value: { work } }) => {
                 gathered.push({ key, work })
             }
         })
@@ -162,7 +162,7 @@ require('proof')(16, async okay => {
             work: [ 1, 2 ], key: 'a'
         }, {
             work: [ 3 ], key: 'b'
-        }], 'okay')
+        }], 'ephemeral example')
 
         // The `destructible` given to `fracture` is destroyed.
         okay(fracture.destructible.destroyed, 'fracture destructible destroyed')
@@ -387,7 +387,7 @@ require('proof')(16, async okay => {
                 entry: () => ({
                     latch: latch(), value: null
                 }),
-                worker: async ({ key, value, promise }) => {
+                worker: async ({ key, value, promise, continued }) => {
                     switch (key) {
                     case 'calculate': {
                             if (promise == null) {
