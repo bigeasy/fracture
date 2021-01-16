@@ -21,8 +21,8 @@ require('proof')(3, async okay => {
             entry: () => ({
                 work: false
             }),
-            worker: async ({ key, value }) => {
-                if (key === 'a' && value.work) {
+            worker: async ({ key, entry }) => {
+                if (key === 'a' && entry.work) {
                     const pause = await fracture.pause('b')
                     const promise = fracture.pause('b')
                     pause.resume()
@@ -34,7 +34,7 @@ require('proof')(3, async okay => {
             }
         })
 
-        fracture.enqueue('a').work = true
+        fracture.enqueue('a').entry.work = true
         fracture.enqueue('b')
         okay('yes')
 
@@ -52,12 +52,12 @@ require('proof')(3, async okay => {
         const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
             turnstile: turnstile,
             entry: () => ({ work: false }),
-            worker: async ({ key, value }) => {
+            worker: async ({ key, entry }) => {
                 throw new Error('thrown')
             }
         })
 
-        fracture.enqueue('a').work = true
+        fracture.enqueue('a').entry.work = true
         fracture.enqueue('b')
         okay('yes')
 
@@ -81,10 +81,10 @@ require('proof')(3, async okay => {
         const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
             turnstile: turnstile,
             entry: () => ({ work: [] }),
-            worker: async ({ key, value }) => gathered.push.apply(gathered, value.work)
+            worker: async ({ key, entry }) => gathered.push.apply(gathered, entry.work)
         })
 
-        fracture.enqueue('a').work.push('a')
+        fracture.enqueue('a').entry.work.push('a')
 
         await fracture.drain()
 
