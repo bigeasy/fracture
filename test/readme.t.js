@@ -75,19 +75,19 @@ require('proof')(16, async okay => {
             entry: () => {
                 return { work: [] }
             },
-            worker: async ({ key, value: { work } }) => {
+            worker: async ({ key, entry: { work } }) => {
                 gathered.push({ key, work })
             }
         })
 
         // Push work into the queue for a particular key.
-        fracture.enqueue('a').work.push(1)
+        fracture.enqueue('a').entry.work.push(1)
 
         // Push more work into the queue for the same key.
-        fracture.enqueue('a').work.push(2)
+        fracture.enqueue('a').entry.work.push(2)
 
         // Push work into the queue for a different key.
-        fracture.enqueue('b').work.push(3)
+        fracture.enqueue('b').entry.work.push(3)
 
         // Destroy the destructible and wait for everything to wind down.
         await destructible.destroy().promise
@@ -144,15 +144,15 @@ require('proof')(16, async okay => {
             entry: () => {
                 return { work: [] }
             },
-            worker: async ({ key, value: { work } }) => {
+            worker: async ({ key, entry: { work } }) => {
                 gathered.push({ key, work })
             }
         })
 
         // Add work to `fracture`.
-        fracture.enqueue('a').work.push(1)
-        fracture.enqueue('a').work.push(2)
-        fracture.enqueue('b').work.push(3)
+        fracture.enqueue('a').entry.work.push(1)
+        fracture.enqueue('a').entry.work.push(2)
+        fracture.enqueue('b').entry.work.push(3)
 
         // Destroy the destructible and wait for everything to wind down.
         await fracture.destructible.destroy().promise
@@ -185,9 +185,9 @@ require('proof')(16, async okay => {
             const fracture = new Fracture(destructible.ephemeral('fracture'), {
                 turnstile: turnstile,
                 entry: () => ({ work: [], entered: false }),
-                worker: async ({ value }) => {
-                    value.entered = true
-                    for (const timeout of value.work) {
+                worker: async ({ entry }) => {
+                    entry.entered = true
+                    for (const timeout of entry.work) {
                         await new Promise(resolve => setTimeout(resolve, timeout))
                     }
                 }
@@ -195,7 +195,7 @@ require('proof')(16, async okay => {
 
             // Add some "work", which is just a timeout duration.
             const first = fracture.enqueue('a')
-            first.work.push(50)
+            first.entry.work.push(50)
 
             // Let's go to the Node.js event loop for a moment so our work queue can
             // start.
@@ -207,8 +207,8 @@ require('proof')(16, async okay => {
             const second = fracture.enqueue('a')
 
             okay(second !== first, 'new user object created for future work')
-            okay(first.entered, 'our first user object has entered the work queue (and could well have left it)')
-            okay(!second.entered, 'our second user object has not entered the work queue')
+            okay(first.entry.entered, 'our first user object has entered the work queue (and could well have left it)')
+            okay(!second.entry.entered, 'our second user object has not entered the work queue')
 
             okay(second === fracture.enqueue('a'), 'we continue to get the same second object until we do something asynchronous')
 
@@ -256,7 +256,7 @@ require('proof')(16, async okay => {
             const fracture = new Fracture(destructible.ephemeral('fracture'), {
                 turnstile: turnstile,
                 entry: () => ({ entered: false, number: 0 }),
-                worker: async ({ key, value, pause }) => {
+                worker: async ({ key, entry, pause }) => {
                     /*
                     switch (key) {
                     case 'a': {
@@ -273,7 +273,7 @@ require('proof')(16, async okay => {
                         break
                     }
                     */
-                    value.entered = true
+                    entry.entered = true
                 }
             })
             //
@@ -282,7 +282,7 @@ require('proof')(16, async okay => {
 
             //
             const willPause = fracture.enqueue('a')
-            willPause.number = 7
+            willPause.entry.number = 7
             //
 
             // Pause immediately. We will get a pause object with an `entries`
@@ -300,7 +300,7 @@ require('proof')(16, async okay => {
             // progress. We are not blocking the queue with our pause.
 
             //
-            const unblocked = fracture.enqueue('b')
+            const unblocked = fracture.enqueue('b').entry
             await new Promise(resolve => setImmediate(resolve))
             okay(unblocked.entered, 'pausing does not block the queue')
             //
@@ -315,7 +315,7 @@ require('proof')(16, async okay => {
             // was completed.
             await fracture.destructible.destroy().promise
 
-            okay(willPause.entered, 'paused work was resumed')
+            okay(willPause.entry.entered, 'paused work was resumed')
         }
 
         {
@@ -338,12 +338,12 @@ require('proof')(16, async okay => {
                 entry: () => ({
                     entered: latch(), block: null, work: 0
                 }),
-                worker: async ({ key, value }) => {
-                    value.entered.resolve()
-                    if (value.block != null) {
-                        await value.block.promise
+                worker: async ({ key, entry }) => {
+                    entry.entered.resolve()
+                    if (entry.block != null) {
+                        await entry.block.promise
                     }
-                    value.entered = true
+                    entry.entered = true
                     if (key == 'a') {
                         const pause = await fracture.pause('b')
                         for (const entry in pause.entries) {
@@ -352,12 +352,12 @@ require('proof')(16, async okay => {
                         }
                         pause.resume()
                     }
-                    sum += value.work
+                    sum += entry.work
                 }
             })
 
-            const a = fracture.enqueue('a')
-            const b = fracture.enqueue('b')
+            const a = fracture.enqueue('a').entry
+            const b = fracture.enqueue('b').entry
 
             a.work = 1
             a.block = latch()
@@ -367,7 +367,7 @@ require('proof')(16, async okay => {
             await a.entered.promise
             await b.entered.promise
 
-            fracture.enqueue('b').work = 3
+            fracture.enqueue('b').entry.work = 3
 
             a.block.resolve()
             await 1
@@ -387,33 +387,38 @@ require('proof')(16, async okay => {
                 entry: () => ({
                     latch: latch(), value: null
                 }),
-                worker: async ({ key, value, promise, continued }) => {
+                worker: async ({ key, entry, promise, continued }) => {
                     switch (key) {
                     case 'calculate': {
+                    console.log('here', entry, promise, promise == null)
+                    console.log('x')
                             if (promise == null) {
-                                const entry = fracture.enqueue(value.method)
-                                entry.value = value.value
-                                return () => entry.latch.promise
+                                const entry_ = fracture.enqueue(entry.method).entry
+                                entry_.value = entry.value
+                                return () => entry_.latch.promise
+                    console.log('y', promise == null)
                             }
-                            value.latch.resolve(await promise)
+                    console.log('z')
+                            entry.latch.resolve(await promise)
                         }
                         break
                     case 'increment': {
-                            value.latch.resolve(value.value + 1)
+                            entry.latch.resolve(entry.value + 1)
                         }
                         break
                     case 'decrement': {
-                            value.latch.resolve(value.value + 1)
+                            entry.latch.resolve(entry.value + 1)
                         }
                         break
                     }
                 }
             })
-            const entry = fracture.enqueue('calculate')
+            const entry = fracture.enqueue('calculate').entry
             entry.value = 1
             entry.method = 'increment'
             okay(await entry.latch.promise, 2, 'continuation')
             await fracture.destructible.destroy().promise
+            console.log('done')
         }
 
 

@@ -35,6 +35,8 @@ class Pause {
 }
 
 class Fracture {
+    static Completion = class extends Future {}
+
     constructor (destructible, { turnstile, entry, worker }) {
         assert(destructible.isDestroyedIfDestroyed(turnstile.destructible))
 
@@ -69,6 +71,7 @@ class Fracture {
             return {
                 state: CREATED,
                 entry: Turnstile.NULL_ENTRY,
+                completed: new Fracture.Completion,
                 continuations: [],
                 pauses: [],
                 entries: []
@@ -97,17 +100,17 @@ class Fracture {
             }
             break
         }
-        return new Pause(this, key, queue.entries.slice(0))
+        return new Pause(this, key, queue.entries.slice(0).map(entry => entry.entry))
     }
 
-    enqueue (key, promise = null) {
+    enqueue (key) {
         this.deferrable.operational()
         const queue = this._get(key)
         if (queue.state == CREATED && queue.continuations.length == 0) {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
-            queue.entries.push((this._entry)(key))
+            queue.entries.push({ completed: new Future, entry: (this._entry)(key) })
         }
         return queue.entries[queue.entries.length - 1]
     }
@@ -125,7 +128,7 @@ class Fracture {
                 queue.state = WORKING
                 const value = queue.entries.shift()
                 const promise = queue.continuations.length == 0 ? null : queue.continuations.shift().promise
-                const continuation = await (this._worker)({ ...entry, key, value, promise })
+                const continuation = await (this._worker)({ ...entry, key, entry: value.entry, promise })
                 if (continuation != null && typeof continuation == 'function') {
                     const future = Future.capture(continuation(), future => {
                         queue.entries.unshift(value)
