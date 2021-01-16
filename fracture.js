@@ -73,6 +73,7 @@ class Fracture {
                 entry: Turnstile.NULL_ENTRY,
                 completed: new Fracture.Completion,
                 continuations: [],
+                blocks: [],
                 pauses: [],
                 entries: []
             }
@@ -126,15 +127,42 @@ class Fracture {
             queue.enqueued = false
             if (queue.state == WAITING) {
                 queue.state = WORKING
-                const value = queue.entries.shift()
-                const promise = queue.continuations.length == 0 ? null : queue.continuations.shift().promise
-                const continuation = await (this._worker)({ ...entry, key, entry: value.entry, promise })
-                if (continuation != null && typeof continuation == 'function') {
-                    const future = Future.capture(continuation(), future => {
-                        queue.entries.unshift(value)
-                        this._enqueue(key)
+
+                const block = new Future
+                queue.blocks.push(block)
+
+                if (queue.continuations.length != 0) {
+                    const { capture, resume } = queue.continuations.shift()
+                    resume.resolve(capture.promise)
+                } else {
+                    const _entry = queue.entries.shift()
+                    const continued = promise => {
+                        if (typeof promise == 'function') {
+                            promise = promise()
+                        }
+                        const resume = new Future
+                        const capture = Future.capture(promise, () => {
+                            this._enqueue(key)
+                        })
+                        queue.continuations.push({ capture, resume })
+                        queue.blocks.shift().resolve()
+                        return resume.promise
+                    }
+                    Future.capture((this._worker)({
+                        ...entry,
+                        key: key,
+                        entry: _entry.entry,
+                        completed: _entry.completed,
+                        continued: continued
+                    }), future => {
+                        queue.blocks.shift().resolve(future.promise)
+                        _entry.completed.resolve()
                     })
-                    queue.continuations.push(future)
+                }
+
+                await block.promise
+
+                if (queue.continuations.length != 0) {
                 } else if (queue.pauses.length != 0) {
                     queue.pauses.shift().resolve()
                 } else if (queue.entries.length != 0) {

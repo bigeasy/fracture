@@ -387,19 +387,15 @@ require('proof')(16, async okay => {
                 entry: () => ({
                     latch: latch(), value: null
                 }),
-                worker: async ({ key, entry, promise, continued }) => {
+                worker: async ({ key, entry, continued }) => {
                     switch (key) {
                     case 'calculate': {
-                    console.log('here', entry, promise, promise == null)
-                    console.log('x')
-                            if (promise == null) {
-                                const entry_ = fracture.enqueue(entry.method).entry
-                                entry_.value = entry.value
-                                return () => entry_.latch.promise
-                    console.log('y', promise == null)
-                            }
-                    console.log('z')
-                            entry.latch.resolve(await promise)
+                            const { entry: delegate, completed } = fracture.enqueue(entry.method)
+                            delegate.value = entry.value
+                            console.log('continuing')
+                            await continued(completed.promise)
+                            console.log('continued')
+                            entry.latch.resolve(await delegate.latch.promise)
                         }
                         break
                     case 'increment': {
