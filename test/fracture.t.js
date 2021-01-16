@@ -21,14 +21,14 @@ require('proof')(3, async okay => {
             entry: () => ({
                 work: false
             }),
-            worker: async ({ key, entry }) => {
+            worker: async ({ key, entry, pause }) => {
                 if (key === 'a' && entry.work) {
-                    const pause = await fracture.pause('b')
-                    const promise = fracture.pause('b')
-                    pause.resume()
+                    const _pause = await pause('b')
+                    const promise = pause('b')
+                    _pause.resume()
                     {
-                        const pause = await promise
-                        pause.resume()
+                        const _pause = await promise
+                        _pause.resume()
                     }
                 }
             }
@@ -71,26 +71,5 @@ require('proof')(3, async okay => {
             const errors = rescue(error, [ [ 0 ], 'thrown' ]).errors
             okay(errors.length, 1, 'caught an error for each bit of work')
         }
-    }
-
-    {
-        const destructible = new Destructible($ => $(), 5000, 'fracture')
-        const turnstile = new Turnstile(destructible)
-
-        const gathered = []
-        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
-            turnstile: turnstile,
-            entry: () => ({ work: [] }),
-            worker: async ({ key, entry }) => gathered.push.apply(gathered, entry.work)
-        })
-
-        fracture.enqueue('a').entry.work.push('a')
-
-        await fracture.drain()
-
-        const pause = await fracture.pause('a')
-        pause.resume()
-
-        await destructible.destroy().promise
     }
 })

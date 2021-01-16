@@ -18,7 +18,7 @@
 // use the Proof `okay` function to assert out statements in the readme. A Proof
 // unit test generally looks like this.
 
-require('proof')(16, async okay => {
+require('proof')(13, async okay => {
     const Fracture = require('..')
 
     // Fracture depends on [Turnstile](https://github.com/bigeasy/turnstile). Turnstile
@@ -250,7 +250,7 @@ require('proof')(16, async okay => {
         // a deadlock due to resource starvation, i.e. there not enough strands to handle a
         // fan-out of work.
 
-        {
+        if (false) {
             // A very basic user object that just marks that the work entered the
             // work function.
             const fracture = new Fracture(destructible.ephemeral('fracture'), {
@@ -338,19 +338,19 @@ require('proof')(16, async okay => {
                 entry: () => ({
                     entered: latch(), block: null, work: 0
                 }),
-                worker: async ({ key, entry }) => {
+                worker: async ({ key, entry, pause }) => {
                     entry.entered.resolve()
                     if (entry.block != null) {
                         await entry.block.promise
                     }
                     entry.entered = true
                     if (key == 'a') {
-                        const pause = await fracture.pause('b')
-                        for (const entry in pause.entries) {
+                        const b = await pause('b')
+                        for (const entry in b.entries) {
                             sum += entry.work
                             entry.work = 0
                         }
-                        pause.resume()
+                        b.resume()
                     }
                     sum += entry.work
                 }

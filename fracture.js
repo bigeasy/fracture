@@ -84,7 +84,7 @@ class Fracture {
         return this._vivifyer.get(Keyify.stringify(key), key)
     }
 
-    async pause (key) {
+    async _pause (key) {
         this.deferrable.operational()
         const queue = this._get(key)
         switch (queue.state) {
@@ -153,7 +153,8 @@ class Fracture {
                         key: key,
                         entry: _entry.entry,
                         completed: _entry.completed,
-                        continued: continued
+                        continued: continued,
+                        pause: key => this._pause(key)
                     }), future => {
                         queue.blocks.shift().resolve(future.promise)
                         _entry.completed.resolve()
