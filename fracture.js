@@ -12,13 +12,49 @@ const WORKING = Symbol('WORKING')
 const WAITING = Symbol('WAITING')
 
 class Fracture {
-    CompletionInstance = 0
+    static CompletionInstance = 0
 
     // **TODO** Feels like a misnomer.
     static Completion = class extends Future {
         constructor () {
             super()
             this.id = Fracture.CompletionInstance++
+        }
+    }
+
+    static NULL_COMPLETION_SET = {
+        size: 0,
+        add () {},
+        clear() {}
+    }
+
+    static CompletionSet = class {
+        constructor () {
+            this._map = new Map
+            this._head = null
+        }
+
+        get size () {
+            return this._map.size
+        }
+
+        add (completed) {
+            if (! this._map.has(completed.id)) {
+                const node = { next: this._head, completed }
+                this._map.set(completed.id, node)
+                this._head = node
+            }
+        }
+
+        async clear () {
+            while (this._head != null) {
+                const { completed } = this._head
+                this._head = this._head.next
+                this._map.delete(completed.id)
+                if (! completed.fulfilled) {
+                    await completed.promise
+                }
+            }
         }
     }
 
@@ -82,7 +118,6 @@ class Fracture {
             return {
                 state: CREATED,
                 entry: Turnstile.NULL_ENTRY,
-                completed: new Fracture.Completion,
                 continuations: [],
                 blocks: [],
                 pauses: [],
@@ -122,7 +157,7 @@ class Fracture {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
-            queue.entries.push({ completed: new Future, entry: (this._entry)(key) })
+            queue.entries.push({ completed: new Fracture.Completion, entry: (this._entry)(key) })
         }
         return queue.entries[queue.entries.length - 1]
     }

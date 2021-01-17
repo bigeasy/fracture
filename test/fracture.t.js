@@ -1,6 +1,6 @@
 // Not able to get all the edge cases in the `readme.t.js` and striving for them
 // is making the `readme.t.js` less in instructive.
-require('proof')(4, async okay => {
+require('proof')(6, async okay => {
     const Fracture = require('..')
     const Turnstile = require('turnstile')
     const Destructible = require('destructible')
@@ -119,5 +119,44 @@ require('proof')(4, async okay => {
         })
 
         await destructible.promise
+    }
+
+    {
+        const destructible = new Destructible($ => $(), 5000, 'fracture')
+        const turnstile = new Turnstile(destructible)
+
+        const completions = new Fracture.CompletionSet
+
+        const gathered = []
+
+        let work = 0
+
+        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
+            turnstile: turnstile,
+            entry: () => ({
+                work: work++
+            }),
+            worker: async ({ key, entry, pause }) => {
+                gathered.push(entry.work)
+            }
+        })
+
+        completions.add(fracture.enqueue('a').completed)
+        completions.add(fracture.enqueue('a').completed)
+        completions.add(fracture.enqueue('b').completed)
+
+        okay(completions.size, 2, 'completion set size')
+
+        await completions.clear()
+
+        okay(gathered, [ 0, 1 ], 'completion set')
+
+        await destructible.destroy().promise
+    }
+
+    {
+        const completions = Fracture.NULL_COMPLETION_SET
+        completions.add()
+        completions.clear()
     }
 })
