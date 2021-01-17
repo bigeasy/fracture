@@ -12,7 +12,15 @@ const WORKING = Symbol('WORKING')
 const WAITING = Symbol('WAITING')
 
 class Fracture {
-    static Completion = class extends Future {}
+    CompletionInstance = 0
+
+    // **TODO** Feels like a misnomer.
+    static Completion = class extends Future {
+        constructor () {
+            super()
+            this.id = Fracture.CompletionInstance++
+        }
+    }
 
     static Pause = class {
         constructor (fracture, key, queue) {
