@@ -1,6 +1,6 @@
 // Not able to get all the edge cases in the `readme.t.js` and striving for them
 // is making the `readme.t.js` less in instructive.
-require('proof')(3, async okay => {
+require('proof')(4, async okay => {
     const Fracture = require('..')
     const Turnstile = require('turnstile')
     const Destructible = require('destructible')
