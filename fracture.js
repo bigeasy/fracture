@@ -12,18 +12,21 @@ const WORKING = Symbol('WORKING')
 const WAITING = Symbol('WAITING')
 
 class Pause {
-    constructor (fracture, key, entries) {
+    constructor (fracture, key, queue) {
         this.fracture = fracture
         this.key = key
-        this.entries = entries
+        this._queue = queue
+    }
+
+    get entries () {
+        return this._queue.entries.map(entry => entry.entry)
     }
 
     resume () {
         this.fracture.deferrable.operational()
-        const queue = this.fracture._get(this.key)
-        if (queue.pauses.length != 0) {
-            queue.pauses.shift().resolve()
-        } else if (queue.entries.length != 0) {
+        if (this._queue.pauses.length != 0) {
+            this._queue.pauses.shift().resolve()
+        } else if (this._queue.entries.length != 0) {
             this.fracture._enqueue(this.key)
         } else {
             this.fracture._vivifyer.remove(Keyify.stringify(this.key))
@@ -101,7 +104,7 @@ class Fracture {
             }
             break
         }
-        return new Pause(this, key, queue.entries.slice(0).map(entry => entry.entry))
+        return new Pause(this, key, queue)
     }
 
     enqueue (key) {
