@@ -11,34 +11,34 @@ const CREATED = Symbol('CREATED')
 const WORKING = Symbol('WORKING')
 const WAITING = Symbol('WAITING')
 
-class Pause {
-    constructor (fracture, key, queue) {
-        this.fracture = fracture
-        this.key = key
-        this._queue = queue
-    }
+class Fracture {
+    static Completion = class extends Future {}
 
-    get entries () {
-        return this._queue.entries.map(entry => entry.entry)
-    }
+    static Pause = class {
+        constructor (fracture, key, queue) {
+            this.fracture = fracture
+            this.key = key
+            this._queue = queue
+        }
 
-    resume () {
-        this.fracture.deferrable.operational()
-        if (this._queue.pauses.length != 0) {
-            this._queue.pauses.shift().resolve()
-        } else if (this._queue.entries.length != 0) {
-            this.fracture._enqueue(this.key)
-        } else {
-            this.fracture._vivifyer.remove(Keyify.stringify(this.key))
-            if (--this.fracture.count == 0) {
-                this.fracture._drain.resolve()
+        get entries () {
+            return this._queue.entries.map(entry => entry.entry)
+        }
+
+        resume () {
+            this.fracture.deferrable.operational()
+            if (this._queue.pauses.length != 0) {
+                this._queue.pauses.shift().resolve()
+            } else if (this._queue.entries.length != 0) {
+                this.fracture._enqueue(this.key)
+            } else {
+                this.fracture._vivifyer.remove(Keyify.stringify(this.key))
+                if (--this.fracture.count == 0) {
+                    this.fracture._drain.resolve()
+                }
             }
         }
     }
-}
-
-class Fracture {
-    static Completion = class extends Future {}
 
     constructor (destructible, { turnstile, entry, worker }) {
         assert(destructible.isDestroyedIfDestroyed(turnstile.destructible))
@@ -104,7 +104,7 @@ class Fracture {
             }
             break
         }
-        return new Pause(this, key, queue)
+        return new Fracture.Pause(this, key, queue)
     }
 
     enqueue (key) {
