@@ -67,27 +67,27 @@ require('proof')(13, async okay => {
         const destructible = new Destructible('fracture')
         const turnstile = new Turnstile(destructible.durable('turnstile'))
 
-        // Create a Fracture with a Destructible, Turnstile, entry constructor and
+        // Create a Fracture with a Destructible, Turnstile, work constructor and
         // worker function.
         const gathered = []
         const fracture = new Fracture(destructible.durable('fracture'), {
             turnstile: turnstile,
-            entry: () => {
+            work: () => {
                 return { work: [] }
             },
-            worker: async ({ key, entry: { work } }) => {
+            worker: async ({ key, work: { work } }) => {
                 gathered.push({ key, work })
             }
         })
 
         // Push work into the queue for a particular key.
-        fracture.enqueue('a').entry.work.push(1)
+        fracture.enqueue('a').work.work.push(1)
 
         // Push more work into the queue for the same key.
-        fracture.enqueue('a').entry.work.push(2)
+        fracture.enqueue('a').work.work.push(2)
 
         // Push work into the queue for a different key.
-        fracture.enqueue('b').entry.work.push(3)
+        fracture.enqueue('b').work.work.push(3)
 
         // Destroy the destructible and wait for everything to wind down.
         await destructible.destroy().promise
@@ -101,10 +101,10 @@ require('proof')(13, async okay => {
     }
 
     // In the example above, `work` is the application specific work queue. When we
-    // call `enqueue` a new application specific entry is created.
+    // call `enqueue` a new application specific work is created.
     //
-    // Deadlock occurs when an entry in the queue depends on a result of an entry in
-    // the queue that precedes it and there are not enough strands available for the
+    // Deadlock occurs when work in the queue depends on a result of work in the
+    // queue that precedes it and there are not enough strands available for the
     // proceding entry to consume the proceding entry.
     //
     // Race conditions are more difficult to describe and are Node.js specific. More on
@@ -136,23 +136,23 @@ require('proof')(13, async okay => {
         const destructible = new Destructible('fracture')
         const turnstile = new Turnstile(destructible.durable('turnstile'))
 
-        // Create a Fracture with a Destructible, Turnstile, entry constructor and
-        // work function.
+        // Create a Fracture with a Destructible, Turnstile, work constructor
+        // and work function.
         const gathered = []
         const fracture = new Fracture(destructible.ephemeral('fracture'), {
             turnstile: turnstile,
-            entry: () => {
+            work: () => {
                 return { work: [] }
             },
-            worker: async ({ key, entry: { work } }) => {
+            worker: async ({ key, work: { work } }) => {
                 gathered.push({ key, work })
             }
         })
 
         // Add work to `fracture`.
-        fracture.enqueue('a').entry.work.push(1)
-        fracture.enqueue('a').entry.work.push(2)
-        fracture.enqueue('b').entry.work.push(3)
+        fracture.enqueue('a').work.work.push(1)
+        fracture.enqueue('a').work.work.push(2)
+        fracture.enqueue('b').work.work.push(3)
 
         // Destroy the destructible and wait for everything to wind down.
         await fracture.destructible.destroy().promise
@@ -184,10 +184,10 @@ require('proof')(13, async okay => {
         {
             const fracture = new Fracture(destructible.ephemeral('fracture'), {
                 turnstile: turnstile,
-                entry: () => ({ work: [], entered: false }),
-                worker: async ({ entry }) => {
-                    entry.entered = true
-                    for (const timeout of entry.work) {
+                work: () => ({ work: [], entered: false }),
+                worker: async ({ work }) => {
+                    work.entered = true
+                    for (const timeout of work.work) {
                         await new Promise(resolve => setTimeout(resolve, timeout))
                     }
                 }
@@ -195,7 +195,7 @@ require('proof')(13, async okay => {
 
             // Add some "work", which is just a timeout duration.
             const first = fracture.enqueue('a')
-            first.entry.work.push(50)
+            first.work.work.push(50)
 
             // Let's go to the Node.js event loop for a moment so our work queue can
             // start.
@@ -207,8 +207,8 @@ require('proof')(13, async okay => {
             const second = fracture.enqueue('a')
 
             okay(second !== first, 'new user object created for future work')
-            okay(first.entry.entered, 'our first user object has entered the work queue (and could well have left it)')
-            okay(!second.entry.entered, 'our second user object has not entered the work queue')
+            okay(first.work.entered, 'our first user object has entered the work queue (and could well have left it)')
+            okay(!second.work.entered, 'our second user object has not entered the work queue')
 
             okay(second === fracture.enqueue('a'), 'we continue to get the same second object until we do something asynchronous')
 
@@ -255,8 +255,8 @@ require('proof')(13, async okay => {
             // work function.
             const fracture = new Fracture(destructible.ephemeral('fracture'), {
                 turnstile: turnstile,
-                entry: () => ({ entered: false, number: 0 }),
-                worker: async ({ key, entry, pause }) => {
+                work: () => ({ entered: false, number: 0 }),
+                worker: async ({ key, work, pause }) => {
                     /*
                     switch (key) {
                     case 'a': {
@@ -273,7 +273,7 @@ require('proof')(13, async okay => {
                         break
                     }
                     */
-                    entry.entered = true
+                    work.entered = true
                 }
             })
             //
@@ -282,7 +282,7 @@ require('proof')(13, async okay => {
 
             //
             const willPause = fracture.enqueue('a')
-            willPause.entry.number = 7
+            willPause.work.number = 7
             //
 
             // Pause immediately. We will get a pause object with an `entries`
@@ -291,7 +291,7 @@ require('proof')(13, async okay => {
 
             //
             const pause = await fracture.pause('a')
-            okay(pause.entries[0], { entered: false, number: 7 }, 'first pause entry')
+            okay(pause.entries[0], { entered: false, number: 7 }, 'first pause work')
             //
 
             //
@@ -300,12 +300,12 @@ require('proof')(13, async okay => {
             // progress. We are not blocking the queue with our pause.
 
             //
-            const unblocked = fracture.enqueue('b').entry
+            const unblocked = fracture.enqueue('b').work
             await new Promise(resolve => setImmediate(resolve))
             okay(unblocked.entered, 'pausing does not block the queue')
             //
 
-            // We now resume our paused entry.
+            // We now resume our paused work.
 
             //
             pause.resume()
@@ -315,7 +315,7 @@ require('proof')(13, async okay => {
             // was completed.
             await fracture.destructible.destroy().promise
 
-            okay(willPause.entry.entered, 'paused work was resumed')
+            okay(willPause.work.entered, 'paused work was resumed')
         }
 
         {
@@ -332,46 +332,49 @@ require('proof')(13, async okay => {
             let sum = 0
 
             const parallel = destructible.ephemeral('parallel')
-            const turnstile = new Turnstile(parallel.durable('turnstile'), { strands: 2 })
-            const fracture = new Fracture(parallel.durable('fracture'), {
-                turnstile: turnstile,
-                entry: () => ({
-                    entered: latch(), block: null, work: 0
-                }),
-                worker: async ({ key, entry, pause }) => {
-                    entry.entered.resolve()
-                    if (entry.block != null) {
-                        await entry.block.promise
-                    }
-                    entry.entered = true
-                    if (key == 'a') {
-                        const b = await pause('b')
-                        for (const entry in b.entries) {
-                            sum += entry.work
-                            entry.work = 0
+
+            parallel.ephemeral('test', async () => {
+                const turnstile = new Turnstile(parallel.durable('turnstile'), { strands: 2 })
+                const fracture = new Fracture(parallel.durable('fracture'), {
+                    turnstile: turnstile,
+                    work: () => ({
+                        entered: latch(), block: null, work: 0
+                    }),
+                    worker: async ({ key, work, pause }) => {
+                        work.entered.resolve()
+                        if (work.block != null) {
+                            await work.block.promise
                         }
-                        b.resume()
+                        work.entered = true
+                        if (key == 'a') {
+                            const b = await pause('b')
+                            for (const work in b.entries) {
+                                sum += work.work
+                                work.work = 0
+                            }
+                            b.resume()
+                        }
+                        sum += work.work
                     }
-                    sum += entry.work
-                }
+                })
+
+                const a = fracture.enqueue('a').work
+                const b = fracture.enqueue('b').work
+
+                a.work = 1
+                a.block = latch()
+                b.work = 2
+                b.block = latch()
+
+                await a.entered.promise
+                await b.entered.promise
+
+                fracture.enqueue('b').work.work = 3
+
+                a.block.resolve()
+                await 1
+                b.block.resolve()
             })
-
-            const a = fracture.enqueue('a').entry
-            const b = fracture.enqueue('b').entry
-
-            a.work = 1
-            a.block = latch()
-            b.work = 2
-            b.block = latch()
-
-            await a.entered.promise
-            await b.entered.promise
-
-            fracture.enqueue('b').entry.work = 3
-
-            a.block.resolve()
-            await 1
-            b.block.resolve()
 
             // Proceed with an orderly shutdown.
 
@@ -384,35 +387,35 @@ require('proof')(13, async okay => {
         {
             const fracture = new Fracture(destructible.durable('fracture'), {
                 turnstile: turnstile,
-                entry: () => ({
+                work: () => ({
                     latch: latch(), value: null
                 }),
-                worker: async ({ key, entry, continued }) => {
+                worker: async ({ key, work, continued }) => {
                     switch (key) {
                     case 'calculate': {
-                            const { entry: delegate, completed } = fracture.enqueue(entry.method)
-                            delegate.value = entry.value
+                            const { work: delegate, completed } = fracture.enqueue(work.method)
+                            delegate.value = work.value
                             console.log('continuing')
                             await continued(completed.promise)
                             console.log('continued')
-                            entry.latch.resolve(await delegate.latch.promise)
+                            work.latch.resolve(await delegate.latch.promise)
                         }
                         break
                     case 'increment': {
-                            entry.latch.resolve(entry.value + 1)
+                            work.latch.resolve(work.value + 1)
                         }
                         break
                     case 'decrement': {
-                            entry.latch.resolve(entry.value + 1)
+                            work.latch.resolve(work.value + 1)
                         }
                         break
                     }
                 }
             })
-            const entry = fracture.enqueue('calculate').entry
-            entry.value = 1
-            entry.method = 'increment'
-            okay(await entry.latch.promise, 2, 'continuation')
+            const work = fracture.enqueue('calculate').work
+            work.value = 1
+            work.method = 'increment'
+            okay(await work.latch.promise, 2, 'continuation')
             await fracture.destructible.destroy().promise
             console.log('done')
         }

@@ -1,11 +1,13 @@
 // Not able to get all the edge cases in the `readme.t.js` and striving for them
 // is making the `readme.t.js` less in instructive.
 require('proof')(6, async okay => {
-    const Fracture = require('..')
+    const rescue = require('rescue')
+
+    const Future = require('perhaps')
     const Turnstile = require('turnstile')
     const Destructible = require('destructible')
 
-    const rescue = require('rescue')
+    const Fracture = require('..')
 
     function latch () {
         let capture
@@ -18,11 +20,11 @@ require('proof')(6, async okay => {
 
         const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
             turnstile: turnstile,
-            entry: () => ({
+            work: () => ({
                 work: false
             }),
-            worker: async ({ key, entry, pause }) => {
-                if (key === 'a' && entry.work) {
+            worker: async ({ key, work, pause }) => {
+                if (key === 'a' && work.work) {
                     const _pause = await pause('b')
                     const promise = pause('b')
                     _pause.resume()
@@ -34,7 +36,7 @@ require('proof')(6, async okay => {
             }
         })
 
-        fracture.enqueue('a').entry.work = true
+        fracture.enqueue('a').work.work = true
         fracture.enqueue('b')
         okay('yes')
 
@@ -51,13 +53,13 @@ require('proof')(6, async okay => {
 
         const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
             turnstile: turnstile,
-            entry: () => ({ work: false }),
-            worker: async ({ key, entry }) => {
+            work: () => ({ work: false }),
+            worker: async ({ key, work }) => {
                 throw new Error('thrown')
             }
         })
 
-        fracture.enqueue('a').entry.work = true
+        fracture.enqueue('a').work.work = true
         fracture.enqueue('b')
         okay('yes')
 
@@ -91,17 +93,17 @@ require('proof')(6, async okay => {
             const turnstile = new Turnstile(destructible.durable($ => $(), 'turnstile'))
             const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
                 turnstile: turnstile,
-                entry: () => ({ value: 0 }),
-                worker: async ({ key, entry, pause }) => {
+                work: () => ({ value: 0 }),
+                worker: async ({ key, work, pause }) => {
                     if (key == 'two') {
                         const one = await pause('one')
-                        for (const entry of one.entries) {
-                            gathered.push(entry.value)
-                            entry.value = 2
+                        for (const work of one.entries) {
+                            gathered.push(work.value)
+                            work.value = 2
                         }
                         one.resume()
                     } else {
-                        gathered.push(entry.value)
+                        gathered.push(work.value)
                     }
                 }
             })
@@ -109,7 +111,7 @@ require('proof')(6, async okay => {
             fracture.enqueue('two')
             await 1
 
-            fracture.enqueue('one').entry.value = 1
+            fracture.enqueue('one').work.value = 1
 
             await fracture.drain()
 
@@ -133,11 +135,11 @@ require('proof')(6, async okay => {
 
         const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
             turnstile: turnstile,
-            entry: () => ({
+            work: () => ({
                 work: work++
             }),
-            worker: async ({ key, entry, pause }) => {
-                gathered.push(entry.work)
+            worker: async ({ key, work, pause }) => {
+                gathered.push(work.work)
             }
         })
 

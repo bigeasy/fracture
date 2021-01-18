@@ -66,7 +66,7 @@ class Fracture {
         }
 
         get entries () {
-            return this._queue.entries.map(entry => entry.entry)
+            return this._queue.entries.map(entry => entry.work)
         }
 
         resume () {
@@ -84,7 +84,7 @@ class Fracture {
         }
     }
 
-    constructor (destructible, { turnstile, entry, worker }) {
+    constructor (destructible, { turnstile, work, worker }) {
         assert(destructible.isDestroyedIfDestroyed(turnstile.destructible))
 
         this.turnstile = turnstile
@@ -105,7 +105,7 @@ class Fracture {
 
         this.deferrable.destruct(() => this.turnstile.deferrable.decrement())
 
-        this._entry = entry
+        this._work = work
         this._worker = worker
 
         this._drain = Future.resolve()
@@ -157,7 +157,7 @@ class Fracture {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
-            queue.entries.push({ completed: new Fracture.Completion, entry: (this._entry)(key) })
+            queue.entries.push({ completed: new Fracture.Completion, work: (this._work)(key) })
         }
         return queue.entries[queue.entries.length - 1]
     }
@@ -181,7 +181,7 @@ class Fracture {
                     const { capture, resume } = queue.continuations.shift()
                     resume.resolve(capture.promise)
                 } else {
-                    const _entry = queue.entries.shift()
+                    const _work = queue.entries.shift()
                     const continued = promise => {
                         if (typeof promise == 'function') {
                             promise = promise()
@@ -197,13 +197,13 @@ class Fracture {
                     Future.capture((this._worker)({
                         ...entry,
                         key: key,
-                        entry: _entry.entry,
-                        completed: _entry.completed,
+                        work: _work.work,
+                        completed: _work.completed,
                         continued: continued,
                         pause: key => this._pause(key)
                     }), future => {
                         queue.blocks.shift().resolve(future.promise)
-                        _entry.completed.resolve()
+                        _work.completed.resolve()
                     })
                 }
 
