@@ -25,7 +25,7 @@
                             "hash.fnv":                     "^1.0.8",
                             "nop":                          "1.0.0",
                             "perhaps":                      "0.0.6",
-                            "turnstile":                    "6.0.0-alpha.54",
+                            "turnstile":                    "6.0.0-alpha.55",
                             "vivifyer":                     "^2.1.0"
     },
     "devDependencies":
