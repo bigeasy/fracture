@@ -186,7 +186,7 @@ class Fracture {
                     }
                 } else {
                     const _work = queue.entries.shift()
-                    const continued = promise => {
+                    const displace = promise => {
                         if (typeof promise == 'function') {
                             promise = promise()
                         }
@@ -212,7 +212,7 @@ class Fracture {
                         ...entry,
                         key: key,
                         work: _work.work,
-                        continued: continued,
+                        displace: displace,
                         pause: key => this._pause(key)
                     })).then((...vargs) => {
                         _work.completed.resolve.apply(_work.completed, vargs)

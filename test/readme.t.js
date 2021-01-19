@@ -392,32 +392,29 @@ require('proof')(13, async okay => {
                 work: () => ({
                     latch: latch(), value: null
                 }),
-                worker: async ({ key, work, continued }) => {
+                worker: async ({ key, work, displace }) => {
                     switch (key) {
                     case 'calculate': {
                             const { work: delegate, completed } = fracture.enqueue(work.method)
                             delegate.value = work.value
-                            console.log('continuing')
-                            await continued(completed.promise)
-                            console.log('continued')
-                            work.latch.resolve(await delegate.latch.promise)
+                            return await displace(completed.promise)
                         }
                         break
                     case 'increment': {
-                            work.latch.resolve(work.value + 1)
+                            return work.value + 1
                         }
                         break
                     case 'decrement': {
-                            work.latch.resolve(work.value + 1)
+                            return work.value - 1
                         }
                         break
                     }
                 }
             })
-            const work = fracture.enqueue('calculate').work
-            work.value = 1
-            work.method = 'increment'
-            okay(await work.latch.promise, 2, 'continuation')
+            const enqueue = fracture.enqueue('calculate')
+            enqueue.work.value = 1
+            enqueue.work.method = 'increment'
+            okay(await enqueue.completed.promise, 2, 'continuation')
             await fracture.destructible.destroy().promise
             console.log('done')
         }
