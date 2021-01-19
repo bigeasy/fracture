@@ -22,12 +22,6 @@ class Fracture {
         }
     }
 
-    static NULL_COMPLETION_SET = {
-        size: 0,
-        add () {},
-        clear() {}
-    }
-
     static CompletionSet = class {
         constructor () {
             this._map = new Map
@@ -57,6 +51,12 @@ class Fracture {
             }
         }
     }
+
+    static NULL_COMPLETION_SET = new (class extends Fracture.CompletionSet {
+        size = 0
+        add () {}
+        clear() {}
+    })
 
     static Pause = class {
         constructor (fracture, key, queue) {
