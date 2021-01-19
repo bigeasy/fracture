@@ -66,7 +66,7 @@ class Fracture {
         }
 
         get entries () {
-            return this._queue.entries.map(entry => entry.work)
+            return this._queue.entries.map(entry => entry.value)
         }
 
         resume () {
@@ -84,7 +84,7 @@ class Fracture {
         }
     }
 
-    constructor (destructible, { turnstile, work, worker }) {
+    constructor (destructible, { turnstile, value, worker }) {
         assert(destructible.isDestroyedIfDestroyed(turnstile.destructible))
 
         this.turnstile = turnstile
@@ -93,6 +93,8 @@ class Fracture {
         this.destructible = destructible
 
         this.deferrable = destructible.durable($ => $(), { countdown: 1 }, 'deferrable')
+
+        this._drain = Future.resolve()
 
         this.destructible.destruct(() => this.deferrable.decrement())
         this.deferrable.panic(() => this._drain.resolve())
@@ -108,10 +110,8 @@ class Fracture {
             this._drain.resolve()
         })
 
-        this._work = work
+        this._value = value
         this._worker = worker
-
-        this._drain = Future.resolve()
 
         this._continuations = []
 
@@ -160,7 +160,7 @@ class Fracture {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
-            queue.entries.push({ completed: new Fracture.Completion, work: (this._work)(key) })
+            queue.entries.push({ completed: new Fracture.Completion, value: (this._value)(key) })
         }
         return queue.entries[queue.entries.length - 1]
     }
@@ -181,11 +181,11 @@ class Fracture {
                     try {
                         this._destructible.operational()
                     } catch (error) {
-                        const _work = queue.entries.shift()
-                        _work.completed.reject(error)
+                        const work = queue.entries.shift()
+                        work.completed.reject(error)
                     }
                 } else {
-                    const _work = queue.entries.shift()
+                    const work = queue.entries.shift()
                     const displace = promise => {
                         if (typeof promise == 'function') {
                             promise = promise()
@@ -211,17 +211,17 @@ class Fracture {
                     this._destructible.destructive($ => $(), 'worker', (this._worker)({
                         ...entry,
                         key: key,
-                        work: _work.work,
+                        value: work.value,
                         displace: displace,
                         pause: key => this._pause(key)
                     })).then((...vargs) => {
-                        _work.completed.resolve.apply(_work.completed, vargs)
+                        work.completed.resolve.apply(work.completed, vargs)
                         queue.blocks.shift().resolve()
                     }, error => {
                         try {
                             this._destructible.operational()
                         } catch (error) {
-                            _work.completed.reject(error)
+                            work.completed.reject(error)
                         }
                         // There can only be one block remaining.
                         queue.blocks[0].resolve()
