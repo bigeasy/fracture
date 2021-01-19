@@ -84,7 +84,7 @@ class Fracture {
         }
     }
 
-    constructor (destructible, { turnstile, value, worker }) {
+    constructor (destructible, { turnstile, value, worker, cancel = () => {} }) {
         assert(destructible.isDestroyedIfDestroyed(turnstile.destructible))
 
         this.turnstile = turnstile
@@ -111,6 +111,7 @@ class Fracture {
         })
 
         this._value = value
+        this._cancel = cancel
         this._worker = worker
 
         this._continuations = []
@@ -181,8 +182,9 @@ class Fracture {
                     try {
                         this._destructible.operational()
                     } catch (error) {
-                        const work = queue.entries.shift()
-                        work.completed.reject(error)
+                        const entry = queue.entries.shift()
+                        ; (this._cancel)({ key, value: entry.value })
+                        entry.completed.reject(error)
                     }
                 } else {
                     const work = queue.entries.shift()
