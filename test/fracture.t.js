@@ -1,6 +1,6 @@
 // Not able to get all the edge cases in the `readme.t.js` and striving for them
 // is making the `readme.t.js` less in instructive.
-require('proof')(6, async okay => {
+require('proof')(5, async okay => {
     const rescue = require('rescue')
 
     const Future = require('perhaps')
@@ -15,64 +15,73 @@ require('proof')(6, async okay => {
     }
 
     {
-        const destructible = new Destructible($ => $(), 5000, 'fracture')
-        const turnstile = new Turnstile(destructible)
+        const destructible = new Destructible($ => $(), 'fracture')
+        const turnstile = new Turnstile(destructible.durable({ isolated: true }, 'turnstile'))
 
-        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
-            turnstile: turnstile,
-            work: () => ({
-                work: false
-            }),
-            worker: async ({ key, work, pause }) => {
-                if (key === 'a' && work.work) {
-                    const _pause = await pause('b')
-                    const promise = pause('b')
-                    _pause.resume()
-                    {
-                        const _pause = await promise
+        destructible.ephemeral('test', async () => {
+            const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
+                turnstile: turnstile,
+                work: () => ({
+                    work: false
+                }),
+                worker: async ({ key, work, pause }) => {
+                    if (key === 'a' && work.work) {
+                        const _pause = await pause('b')
+                        const promise = pause('b')
                         _pause.resume()
+                        {
+                            const _pause = await promise
+                            _pause.resume()
+                        }
                     }
                 }
+            })
+
+            fracture.enqueue('a').work.work = true
+            fracture.enqueue('b')
+            okay('yes')
+
+            for (const promise of [ fracture.drain(), fracture.drain() ]) {
+                console.log('draining')
+                await promise
             }
         })
-
-        fracture.enqueue('a').work.work = true
-        fracture.enqueue('b')
-        okay('yes')
-
-        for (const promise of [ fracture.drain(), fracture.drain() ]) {
-            await promise
-        }
 
         await destructible.destroy().promise
     }
 
     {
         const destructible = new Destructible($ => $(), 'fracture')
-        const turnstile = new Turnstile(destructible.durable($ => $(), 'turnstile'))
+        const turnstile = new Turnstile(destructible.durable($ => $(), { isolated: true }, 'turnstile'))
 
-        const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
-            turnstile: turnstile,
-            work: () => ({ work: false }),
-            worker: async ({ key, work }) => {
-                throw new Error('thrown')
+        const test = []
+
+        destructible.ephemeral($ => $(), 'test', async () => {
+            const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
+                turnstile: turnstile,
+                work: () => ({ work: false }),
+                worker: async ({ key, work }) => {
+                    throw new Error('thrown')
+                }
+            })
+            fracture.enqueue('a')
+            try {
+                await fracture.enqueue('b').completed.promise
+            } catch (error) {
+                rescue(error, [{ symbol: Destructible.Error.DESTROYED }])
+                test.push('destroyed')
             }
+            await fracture.drain()
         })
-
-        fracture.enqueue('a').work.work = true
-        fracture.enqueue('b')
-        okay('yes')
-
-        for (const promise of [ fracture.drain(), fracture.drain() ]) {
-            await promise
-        }
 
         try {
             await destructible.destroy().promise
         } catch (error) {
-            const errors = rescue(error, [ [ 0 ], 'thrown' ]).errors
-            okay(errors.length, 1, 'caught an error for each bit of work')
+            rescue(error, [ 'thrown' ])
+            test.push('thrown')
         }
+
+        okay(test, [ 'destroyed', 'thrown' ], 'error and destroyed')
     }
     //
 

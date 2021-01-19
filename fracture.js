@@ -70,7 +70,7 @@ class Fracture {
         }
 
         resume () {
-            this.fracture.deferrable.operational()
+            this.fracture._destructible.operational()
             if (this._queue.pauses.length != 0) {
                 this._queue.pauses.shift().resolve()
             } else if (this._queue.entries.length != 0) {
@@ -94,16 +94,19 @@ class Fracture {
 
         this.deferrable = destructible.durable($ => $(), { countdown: 1 }, 'deferrable')
 
-        this.destructible.destruct(() => {
-            this.destructible.ephemeral($ => $(), 'shutdown', async () => {
-                await this.destructible.copacetic('drain', null, async () => this.drain())
-                this._drain.resolve()
-                this.deferrable.decrement()
+        this.destructible.destruct(() => this.deferrable.decrement())
+        this.deferrable.panic(() => this._drain.resolve())
+        this.deferrable.destruct(() => {
+            this.deferrable.ephemeral($ => $(), 'shutdown', async () => {
+                await this.destructible.copacetic2(async () => this.drain())
+                this._destructible.decrement()
+                this.turnstile.deferrable.decrement()
             })
         })
-        this.destructible.panic(() => this._drain.resolve())
-
-        this.deferrable.destruct(() => this.turnstile.deferrable.decrement())
+        this._destructible = this.deferrable.durable($ => $(), { countdown: 1 }, 'fracture')
+        this._destructible.panic(() => {
+            this._drain.resolve()
+        })
 
         this._work = work
         this._worker = worker
@@ -131,7 +134,7 @@ class Fracture {
     }
 
     async _pause (key) {
-        this.deferrable.operational()
+        this._destructible.operational()
         const queue = this._get(key)
         switch (queue.state) {
         case WORKING:
@@ -162,10 +165,6 @@ class Fracture {
         return queue.entries[queue.entries.length - 1]
     }
 
-    // We do not provide any sort of return from enqueue. If the user wants to
-    // turn a value they can construct a `Promise` in their entry.
-
-    //
     _enqueue (key) {
         const queue = this._get(key)
         queue.state = WAITING
@@ -174,12 +173,17 @@ class Fracture {
             if (queue.state == WAITING) {
                 queue.state = WORKING
 
-                const block = new Future
-                queue.blocks.push(block)
-
                 if (queue.continuations.length != 0) {
                     const { capture, resume } = queue.continuations.shift()
                     resume.resolve(capture.promise)
+                } else if (this._destructible.destroyed) {
+                    queue.blocks.push(Future.resolve())
+                    try {
+                        this._destructible.operational()
+                    } catch (error) {
+                        const _work = queue.entries.shift()
+                        _work.completed.reject(error)
+                    }
                 } else {
                     const _work = queue.entries.shift()
                     const continued = promise => {
@@ -191,27 +195,52 @@ class Fracture {
                             this._enqueue(key)
                         })
                         queue.continuations.push({ capture, resume })
-                        queue.blocks.shift().resolve()
+                        // `displace` might be called a couple times before we come back
+                        // around in the queue where blocks are shifted so we scan for the
+                        // first unfulfilled block and resolve that one.
+                        queue.blocks.push(new Future)
+                        for (const block of queue.blocks) {
+                            if (! block.fulfilled) {
+                                block.resolve()
+                                break
+                            }
+                        }
                         return resume.promise
                     }
-                    Future.capture((this._worker)({
+                    queue.blocks.push(new Future)
+                    this._destructible.destructive($ => $(), 'worker', (this._worker)({
                         ...entry,
                         key: key,
                         work: _work.work,
-                        completed: _work.completed,
                         continued: continued,
                         pause: key => this._pause(key)
-                    }), future => {
-                        queue.blocks.shift().resolve(future.promise)
-                        _work.completed.resolve()
+                    })).then((...vargs) => {
+                        _work.completed.resolve.apply(_work.completed, vargs)
+                        queue.blocks.shift().resolve()
+                    }, error => {
+                        try {
+                            this._destructible.operational()
+                        } catch (error) {
+                            _work.completed.reject(error)
+                        }
+                        // There can only be one block remaining.
+                        queue.blocks[0].resolve()
                     })
                 }
 
-                await block.promise
+                // Await a block then shift it. An inversion of the scram array
+                // in Destructible where the resolving side shifts.
+                await queue.blocks[0].promise
+                queue.blocks.shift()
 
                 if (queue.continuations.length != 0) {
                 } else if (queue.pauses.length != 0) {
-                    queue.pauses.shift().resolve()
+                    try {
+                        this._destructible.operational()
+                        queue.pauses.shift().resolve()
+                    } catch (error) {
+                        queue.pauses.shift().reject(error)
+                    }
                 } else if (queue.entries.length != 0) {
                     this._enqueue(key)
                 } else {
@@ -227,7 +256,7 @@ class Fracture {
     drain () {
         if (this.count != 0) {
             return (async () => {
-                while (! this.deferrable.destroyed && this.count != 0) {
+                while (! this._destructible.destroyed && this.count != 0) {
                     if (this._drain.fulfilled) {
                         this._drain = new Future
                     }

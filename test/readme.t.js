@@ -334,7 +334,7 @@ require('proof')(13, async okay => {
             const parallel = destructible.ephemeral('parallel')
 
             parallel.ephemeral('test', async () => {
-                const turnstile = new Turnstile(parallel.durable('turnstile'), { strands: 2 })
+                const turnstile = new Turnstile(parallel.durable({ isolated: true }, 'turnstile'), { strands: 2 })
                 const fracture = new Fracture(parallel.durable('fracture'), {
                     turnstile: turnstile,
                     work: () => ({
@@ -374,12 +374,14 @@ require('proof')(13, async okay => {
                 a.block.resolve()
                 await 1
                 b.block.resolve()
+
+                parallel.destroy()
             })
 
             // Proceed with an orderly shutdown.
 
             //
-            await parallel.destroy().promise
+            await parallel.promise
         }
 
         // Deadlock can also be resolved by the caller pausing itself.
