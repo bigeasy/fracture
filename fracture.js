@@ -22,32 +22,34 @@ class Fracture {
         }
     }
 
+    // **TODO** Why does insertion order matter at all?
     static CompletionSet = class {
         constructor () {
-            this._map = new Map
-            this._head = null
+            this._set = new Set
         }
 
         get size () {
-            return this._map.size
+            return this._set.size
         }
 
         add (completed) {
-            if (! this._map.has(completed.id)) {
-                const node = { next: this._head, completed }
-                this._map.set(completed.id, node)
-                this._head = node
+            this._set.add(completed)
+        }
+
+        prune () {
+            for (const completed of this._set) {
+                if (completed.fulfilled) {
+                    this._set.delete(completed)
+                } else {
+                    break
+                }
             }
         }
 
-        async clear () {
-            while (this._head != null) {
-                const { completed } = this._head
-                this._head = this._head.next
-                this._map.delete(completed.id)
-                if (! completed.fulfilled) {
-                    await completed.promise
-                }
+        async join () {
+            for (const completed of this._set) {
+                await completed.promise
+                this._set.delete(completed)
             }
         }
     }
@@ -55,7 +57,8 @@ class Fracture {
     static NULL_COMPLETION_SET = new (class extends Fracture.CompletionSet {
         size = 0
         add () {}
-        clear() {}
+        prune () {}
+        join() {}
     })
 
     static Pause = class {

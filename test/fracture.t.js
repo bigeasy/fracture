@@ -145,9 +145,13 @@ require('proof')(5, async okay => {
         const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
             turnstile: turnstile,
             value: () => ({
-                work: work++
+                work: work++,
+                latch: latch()
             }),
             worker: async ({ key, value, pause }) => {
+                if (key == 'b') {
+                    await value.latch.promise
+                }
                 gathered.push(value.work)
             }
         })
@@ -156,9 +160,16 @@ require('proof')(5, async okay => {
         completions.add(fracture.enqueue('a').completed)
         completions.add(fracture.enqueue('b').completed)
 
+        const b = fracture.enqueue('b')
+
         okay(completions.size, 2, 'completion set size')
 
-        await completions.clear()
+        await fracture.enqueue('a').completed.promise
+        completions.prune()
+
+        b.value.latch.resolve()
+
+        await completions.join()
 
         okay(gathered, [ 0, 1 ], 'completion set')
 
@@ -168,6 +179,7 @@ require('proof')(5, async okay => {
     {
         const completions = Fracture.NULL_COMPLETION_SET
         completions.add()
-        completions.clear()
+        completions.prune()
+        completions.join()
     }
 })
