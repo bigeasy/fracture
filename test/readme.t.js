@@ -395,9 +395,9 @@ require('proof')(13, async okay => {
                 worker: async ({ key, value, displace }) => {
                     switch (key) {
                     case 'calculate': {
-                            const { value: delegate, completed } = fracture.enqueue(value.method)
+                            const { value: delegate, future } = fracture.enqueue(value.method)
                             delegate.value = value.value
-                            return await displace(completed.promise)
+                            return await displace(future.promise)
                         }
                         break
                     case 'increment': {
@@ -414,7 +414,7 @@ require('proof')(13, async okay => {
             const enqueue = fracture.enqueue('calculate')
             enqueue.value.value = 1
             enqueue.value.method = 'increment'
-            okay(await enqueue.completed.promise, 2, 'continuation')
+            okay(await enqueue.future.promise, 2, 'continuation')
             await fracture.destructible.destroy().promise
             console.log('done')
         }

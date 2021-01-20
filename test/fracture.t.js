@@ -66,7 +66,7 @@ require('proof')(5, async okay => {
             })
             fracture.enqueue('a')
             try {
-                await fracture.enqueue('b').completed.promise
+                await fracture.enqueue('b').future.promise
             } catch (error) {
                 rescue(error, [{ symbol: Destructible.Error.DESTROYED }])
                 test.push('destroyed')
@@ -136,7 +136,7 @@ require('proof')(5, async okay => {
         const destructible = new Destructible($ => $(), 5000, 'fracture')
         const turnstile = new Turnstile(destructible)
 
-        const completions = new Fracture.CompletionSet
+        const completions = new Fracture.FutureSet
 
         const gathered = []
 
@@ -156,15 +156,15 @@ require('proof')(5, async okay => {
             }
         })
 
-        completions.add(fracture.enqueue('a').completed)
-        completions.add(fracture.enqueue('a').completed)
-        completions.add(fracture.enqueue('b').completed)
+        completions.add(fracture.enqueue('a').future)
+        completions.add(fracture.enqueue('a').future)
+        completions.add(fracture.enqueue('b').future)
 
         const b = fracture.enqueue('b')
 
         okay(completions.size, 2, 'completion set size')
 
-        await fracture.enqueue('a').completed.promise
+        await fracture.enqueue('a').future.promise
         completions.prune()
 
         b.value.latch.resolve()
@@ -177,7 +177,7 @@ require('proof')(5, async okay => {
     }
 
     {
-        const completions = Fracture.NULL_COMPLETION_SET
+        const completions = Fracture.NULL_FUTURE_SET
         completions.add()
         completions.prune()
         completions.join()

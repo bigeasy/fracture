@@ -12,18 +12,9 @@ const WORKING = Symbol('WORKING')
 const WAITING = Symbol('WAITING')
 
 class Fracture {
-    static CompletionInstance = 0
+    static Future = class extends Future {}
 
-    // **TODO** Feels like a misnomer.
-    static Completion = class extends Future {
-        constructor () {
-            super()
-            this.id = Fracture.CompletionInstance++
-        }
-    }
-
-    // **TODO** Why does insertion order matter at all?
-    static CompletionSet = class {
+    static FutureSet = class {
         constructor () {
             this._set = new Set
         }
@@ -32,14 +23,14 @@ class Fracture {
             return this._set.size
         }
 
-        add (completed) {
-            this._set.add(completed)
+        add (future) {
+            this._set.add(future)
         }
 
         prune () {
-            for (const completed of this._set) {
-                if (completed.fulfilled) {
-                    this._set.delete(completed)
+            for (const future of this._set) {
+                if (future.fulfilled) {
+                    this._set.delete(future)
                 } else {
                     break
                 }
@@ -47,14 +38,14 @@ class Fracture {
         }
 
         async join () {
-            for (const completed of this._set) {
-                await completed.promise
-                this._set.delete(completed)
+            for (const future of this._set) {
+                await future.promise
+                this._set.delete(future)
             }
         }
     }
 
-    static NULL_COMPLETION_SET = new (class extends Fracture.CompletionSet {
+    static NULL_FUTURE_SET = new (class extends Fracture.FutureSet {
         size = 0
         add () {}
         prune () {}
@@ -164,7 +155,7 @@ class Fracture {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
-            queue.entries.push({ completed: new Fracture.Completion, value: (this._value)(key) })
+            queue.entries.push({ future: new Fracture.Future, value: (this._value)(key) })
         }
         return queue.entries[queue.entries.length - 1]
     }
@@ -187,7 +178,7 @@ class Fracture {
                     } catch (error) {
                         const entry = queue.entries.shift()
                         ; (this._cancel)({ key, value: entry.value })
-                        entry.completed.reject(error)
+                        entry.future.reject(error)
                     }
                 } else {
                     const work = queue.entries.shift()
@@ -220,13 +211,13 @@ class Fracture {
                         displace: displace,
                         pause: key => this._pause(key)
                     })).then((...vargs) => {
-                        work.completed.resolve.apply(work.completed, vargs)
+                        work.future.resolve.apply(work.future, vargs)
                         queue.blocks.shift().resolve()
                     }, error => {
                         try {
                             this._destructible.operational()
                         } catch (error) {
-                            work.completed.reject(error)
+                            work.future.reject(error)
                         }
                         // There can only be one block remaining.
                         queue.blocks[0].resolve()
