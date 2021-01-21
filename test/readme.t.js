@@ -387,7 +387,7 @@ require('proof')(13, async okay => {
         // Deadlock can also be resolved by the caller pausing itself.
 
         {
-            const fracture = new Fracture(destructible.durable('fracture'), {
+            const fracture = new Fracture(destructible.ephemeral('fracture'), {
                 turnstile: turnstile,
                 value: () => ({
                     latch: latch(), value: null
