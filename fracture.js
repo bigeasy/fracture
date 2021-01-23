@@ -1,3 +1,35 @@
+// # Fracture
+
+// Welcome back. Here's the stuff that will take some time to load into
+// programmer memory.
+
+//  * We use `Destructible.destructive` to wrap the worker function invocation
+//  so that an error will wreck the Fracture destructible and not the Turnstile.
+//  * Continuations are necessary if you call a Fracture-based function so that
+//  a worker does not wait on a another worker behind it in the queue. Even with
+//  multiple strands we can deadlock if all strands are waiting on something
+//  behind them in the queue.
+//
+// And while you're here maybe think about this...
+//
+// Still don't know how to shut it down after error. Let's start by asserting
+// that is the intention of the design that once a Fracture has a failure it is
+// in a panic and no more work will be accepted, any queued work will be
+// abandoned. This is what we want to see happen.
+//
+// Any work that is in process is allowed to complete.
+//
+// The only thing that remains a mystery are displacements. Does `displace`
+// raise an exception in order to arrest forward motion of the worker or does it
+// try to continue working?
+//
+// For starters, we can can run the displacements inside `destructive`, so we
+// know that the error will get reported by Destructible. Well, that seems like
+// it is starters and finishers. It kind of solves the problem of lost errors.
+//
+// Think about it, this is what we're doing for now.
+
+//
 const assert = require('assert')
 
 const Keyify = require('keyify')
@@ -12,6 +44,11 @@ const WORKING = Symbol('WORKING')
 const WAITING = Symbol('WAITING')
 
 class Fracture {
+    // When you implement a function that uses fracture you should either return
+    // the enqueue future or accept a future set and add enqueue futures to it.
+    // These signatures will let the caller know that they should use `displace`
+    // to invoke the function or resolve the future set if they are calling from
+    // within a Fracture worker.
     static Future = class extends Future {}
 
     static FutureSet = class {
@@ -44,7 +81,11 @@ class Fracture {
             }
         }
     }
+    //
 
+    // To be used as a default argument for functions that accept a future set
+    // when the caller doesn't intend to await the resolution of the futures in
+    // the set.
     static NULL_FUTURE_SET = new (class extends Fracture.FutureSet {
         size = 0
         add () {}
@@ -94,13 +135,37 @@ class Fracture {
         this.deferrable.panic(() => this._drain.resolve())
         this.deferrable.destruct(() => {
             this.deferrable.ephemeral($ => $(), 'shutdown', async () => {
-                await this.destructible.copacetic2(async () => this.drain())
+                await this.drain()
+                console.log('did drain', this.count, this.turnstile.deferrable.destroyed)
                 this._destructible.decrement()
                 this.turnstile.deferrable.decrement()
             })
         })
         this._destructible = this.deferrable.durable($ => $(), { countdown: 1 }, 'fracture')
+        // When we are errored all queued work will reject with a
+        // `Destructible.Error.DESTORYED`. We run workers and displacements in
+        // destructible so we don't have to worry about swallowing errors. Any
+        // errors that occur will get reported through destructible.
+        //
+        // The user will have to come to grips with the fact that a return value
+        // may be lost if their is an error in the Fracture even if the value a
+        // valid resolution. I've got no problem with this since the database
+        // work I'm doing based on Fracture always culminates in an atomic
+        // operation that preserves the work that if missing means the work
+        // failed and failed atomically.
         this._destructible.panic(() => {
+            try {
+                this._destructible.operational()
+            } catch (error) {
+                for (const key in this._vivifyer.map) {
+                    const queue = this._vivifyer.map[key]
+                    for (const entry of queue.working.concat(queue.displacements.concat(queue.entries))) {
+                        entry.future.reject(error)
+                    }
+                    this.count--
+                    this._vivifyer.remove(key)
+                }
+            }
             this._drain.resolve()
         })
 
@@ -108,7 +173,7 @@ class Fracture {
         this._cancel = cancel
         this._worker = worker
 
-        this._continuations = []
+        this._displacements = []
 
         this.count = 0
         this._vivifyer = new Vivifyer((_, key) => {
@@ -116,10 +181,11 @@ class Fracture {
             return {
                 state: CREATED,
                 entry: Turnstile.NULL_ENTRY,
-                continuations: [],
+                displacements: [],
                 blocks: [],
                 pauses: [],
-                entries: []
+                entries: [],
+                working: []
             }
         })
     }
@@ -151,7 +217,7 @@ class Fracture {
     enqueue (key) {
         this.deferrable.operational()
         const queue = this._get(key)
-        if (queue.state == CREATED && queue.continuations.length == 0) {
+        if (queue.state == CREATED && queue.displacements.length == 0) {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
@@ -168,10 +234,11 @@ class Fracture {
             if (queue.state == WAITING) {
                 queue.state = WORKING
 
-                if (queue.continuations.length != 0) {
-                    const { capture, resume } = queue.continuations.shift()
-                    resume.resolve(capture.promise)
+                if (queue.displacements.length != 0) {
+                    const { capture, future } = queue.displacements.shift()
+                    future.resolve(capture.promise)
                 } else if (this._destructible.destroyed) {
+                    console.log('am I destroyed?', key)
                     queue.blocks.push(Future.resolve())
                     try {
                         this._destructible.operational()
@@ -182,15 +249,18 @@ class Fracture {
                     }
                 } else {
                     const work = queue.entries.shift()
+                    queue.working.push(work)
                     const displace = promise => {
-                        if (typeof promise == 'function') {
-                            promise = promise()
-                        }
-                        const resume = new Future
-                        const capture = Future.capture(promise, () => {
+                        const future = new Future
+                        const capture = Future.capture(this._destructible.destructive($ => $(), 'displace', async () => {
+                            if (typeof promise == 'function') {
+                                return promise()
+                            }
+                            return promise
+                        }), () => {
                             this._enqueue(key)
                         })
-                        queue.continuations.push({ capture, resume })
+                        queue.displacements.push({ capture, future })
                         // `displace` might be called a couple times before we come back
                         // around in the queue where blocks are shifted so we scan for the
                         // first unfulfilled block and resolve that one.
@@ -201,7 +271,7 @@ class Fracture {
                                 break
                             }
                         }
-                        return resume.promise
+                        return future.promise
                     }
                     queue.blocks.push(new Future)
                     this._destructible.destructive($ => $(), 'worker', (this._worker)({
@@ -211,9 +281,11 @@ class Fracture {
                         displace: displace,
                         pause: key => this._pause(key)
                     })).then((...vargs) => {
+                        queue.working.shift()
                         work.future.resolve.apply(work.future, vargs)
                         queue.blocks.shift().resolve()
                     }, error => {
+                        queue.working.shift()
                         try {
                             this._destructible.operational()
                         } catch (error) {
@@ -229,7 +301,7 @@ class Fracture {
                 await queue.blocks[0].promise
                 queue.blocks.shift()
 
-                if (queue.continuations.length != 0) {
+                if (queue.displacements.length != 0) {
                 } else if (queue.pauses.length != 0) {
                     try {
                         this._destructible.operational()
@@ -250,9 +322,9 @@ class Fracture {
     }
 
     drain () {
-        if (this.count != 0) {
+        if (! this.deferrable.errored && this.count != 0) {
             return (async () => {
-                while (! this._destructible.destroyed && this.count != 0) {
+                while (! this.deferrable.errored && this.count != 0) {
                     if (this._drain.fulfilled) {
                         this._drain = new Future
                     }
