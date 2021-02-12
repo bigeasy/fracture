@@ -21,7 +21,7 @@
     },
     "dependencies":
     {
-                            "extant":                       "^1.0.20",
+                            "extant":                       "^2.0.0-alpha.0",
                             "hash.fnv":                     "^1.0.8",
                             "nop":                          "1.0.0",
                             "perhaps":                      "0.0.6",
