@@ -136,7 +136,6 @@ class Fracture {
         this.deferrable.destruct(() => {
             this.deferrable.ephemeral($ => $(), 'shutdown', async () => {
                 await this.drain()
-                console.log('did drain', this.count, this.turnstile.deferrable.destroyed)
                 this._destructible.decrement()
                 this.turnstile.deferrable.decrement()
             })
