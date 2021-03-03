@@ -138,7 +138,7 @@ class Fracture {
                 this.turnstile.deferrable.decrement()
             })
         })
-        this._destructible = this.deferrable.durable($ => $(), { countdown: 1 }, 'fracture')
+        this._destructible = this.deferrable.durable($ => $(), { countdown: 1 }, 'queue')
         // When we are errored all queued work will reject with a
         // `Destructible.Error.DESTORYED`. We run workers and displacements in
         // destructible so we don't have to worry about swallowing errors. Any
