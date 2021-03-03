@@ -120,8 +120,6 @@ class Fracture {
     }
 
     constructor (destructible, { turnstile, value, worker, cancel = () => {} }) {
-        assert(destructible.isDestroyedIfDestroyed(turnstile.destructible))
-
         this.turnstile = turnstile
         this.turnstile.deferrable.increment()
 
