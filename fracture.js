@@ -255,7 +255,11 @@ class Fracture {
                             }
                             return promise
                         }), () => {
-                            this._enqueue(key)
+                            try {
+                                this._enqueue(key)
+                            } catch (error) {
+                                future.reject(error)
+                            }
                         })
                         queue.displacements.push({ capture, future })
                         // `displace` might be called a couple times before we come back
