@@ -249,7 +249,7 @@ class Fracture {
                     queue.working.push(work)
                     const displace = promise => {
                         const future = new Future
-                        const capture = Future.capture(this._destructible.destructive($ => $(), 'displace', async () => {
+                        const capture = Future.capture(this._destructible.destructive($ => $(), 'displace', () => {
                             if (typeof promise == 'function') {
                                 return promise()
                             }
