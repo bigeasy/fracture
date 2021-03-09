@@ -235,7 +235,6 @@ class Fracture {
                     const { capture, future } = queue.displacements.shift()
                     future.resolve(capture.promise)
                 } else if (this._destructible.destroyed) {
-                    console.log('am I destroyed?', key)
                     queue.blocks.push(Future.resolve())
                     try {
                         this._destructible.operational()
