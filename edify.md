@@ -24,14 +24,9 @@ use the Proof `okay` function to assert out statements in the readme. A Proof
 unit test generally looks like this.
 
 ```javascript
-//{ "code": { "tests": 16 }, "text": { "tests": 4  } }
+//{ "code": { "tests": 8 }, "text": { "tests": 4  } }
 require('proof')(%(tests)d, async okay => {
-    //{ "include": "testRequire" }
     //{ "include": "test" }
-    okay('always okay')
-    okay(true, 'okay if true')
-    okay(1, 1, 'okay if equal')
-    okay({ value: 1 }, { value: 1 }, 'okay if deep strict equal')
 })
 ```
 
@@ -39,12 +34,18 @@ The `'fracture'` module exports a single `Fracture` object.
 
 
 ```javascript
-//{ "name": "displayedRequire", "mode": "text" }
-const Fracture = require('fracture')
+//{ "name": "test", "mode": "text", "unblock": true }
+{
+    const Fracture = require('fracture')
+    okay('always okay')
+    okay(true, 'okay if true')
+    okay(1, 1, 'okay if equal')
+    okay({ value: 1 }, { value: 1 }, 'okay if deep strict equal')
+}
 ```
 
 ```javascript
-//{ "name": "testRequire", "mode": "code" }
+//{ "name": "test", "mode": "code" }
 const Fracture = require('..')
 ```
 
@@ -101,22 +102,22 @@ worker function.
     const gathered = []
     const fracture = new Fracture(destructible.durable('fracture'), {
         turnstile: turnstile,
-        entry: () => {
+        value: () => {
             return { work: [] }
         },
-        worker: ({ key, value: { work } }) => {
+        worker: async ({ key, value: { work } }) => {
             gathered.push({ key, work })
         }
     })
 
     // Push work into the queue for a particular key.
-    fracture.enqueue('a').work.push(1)
+    fracture.enqueue('a', entry => entry.work.push(1))
 
     // Push more work into the queue for the same key.
-    fracture.enqueue('a').work.push(2)
+    fracture.enqueue('a', entry => entry.work.push(2))
 
     // Push work into the queue for a different key.
-    fracture.enqueue('b').work.push(3)
+    fracture.enqueue('b', entry => entry.work.push(3))
 
     // Destroy the destructible and wait for everything to wind down.
     await destructible.destroy().promise
@@ -173,18 +174,18 @@ Destructible, but a Fracture can end during the life of the program.
     const gathered = []
     const fracture = new Fracture(destructible.ephemeral('fracture'), {
         turnstile: turnstile,
-        entry: () => {
+        value: () => {
             return { work: [] }
         },
-        worker: ({ key, value: { work } }) => {
+        worker: async ({ key, value: { work } }) => {
             gathered.push({ key, work })
         }
     })
 
     // Add work to `fracture`.
-    fracture.enqueue('a').work.push(1)
-    fracture.enqueue('a').work.push(2)
-    fracture.enqueue('b').work.push(3)
+    fracture.enqueue('a', entry => entry.work.push(1))
+    fracture.enqueue('a', entry => entry.work.push(2))
+    fracture.enqueue('b', entry => entry.work.push(3))
 
     // Destroy the destructible and wait for everything to wind down.
     await fracture.destructible.destroy().promise
@@ -212,7 +213,7 @@ const Turnstile = require('turnstile')
 const destructible = new Destructible($ => $(), 'fracture.t')
 const turnstile = new Turnstile(destructible.durable($ => $(), 'turnstile'))
 
-await destructible.rescue(async () => {
+await destructible.ephemeral('test', async () => {
     //{ "include": "test" }
 
     destructible.destroy()
@@ -229,7 +230,7 @@ and that we're reusing them.
 {
     const fracture = new Fracture(destructible.ephemeral('fracture'), {
         turnstile: turnstile,
-        entry: () => ({ work: [], entered: false }),
+        value: () => ({ work: [], entered: false }),
         worker: async ({ value }) => {
             value.entered = true
             for (const timeout of value.work) {
@@ -239,8 +240,11 @@ and that we're reusing them.
     })
 
     // Add some "work", which is just a timeout duration.
-    const first = fracture.enqueue('a')
-    first.work.push(50)
+    let first
+    fracture.enqueue('a', entry => {
+        entry.work.push(50)
+        first = entry
+    })
 
     // Let's go to the Node.js event loop for a moment so our work queue can
     // start.
@@ -249,13 +253,14 @@ and that we're reusing them.
     // Now when we enqueue we're going to get a new user object. Our current
     // object is in the work queue. We cannot add more work to it. We held
     // on to it just to show that a new user object has been created.
-    const second = fracture.enqueue('a')
+    let second
+    fracture.enqueue('a', entry => second = entry)
 
     okay(second !== first, 'new user object created for future work')
     okay(first.entered, 'our first user object has entered the work queue (and could well have left it)')
     okay(!second.entered, 'our second user object has not entered the work queue')
 
-    okay(second === fracture.enqueue('a'), 'we continue to get the same second object until we do something asynchronous')
+    fracture.enqueue('a', entry => okay(entry == second, 'we continue to get the same second object until we do something asynchronous'))
 
     await fracture.destructible.destroy().promise
 }
@@ -298,12 +303,12 @@ fan-out of work.
 
 ```javascript
 //{ "unblock": true, "name": "test" }
-{
+if (false) {
     // A very basic user object that just marks that the work entered the
     // work function.
     const fracture = new Fracture(destructible.ephemeral('fracture'), {
         turnstile: turnstile,
-        entry: () => ({ entered: false, number: 0 }),
+        work: () => ({ entered: false, number: 0 }),
         worker: async ({ key, value, pause }) => {
             /*
             switch (key) {
@@ -330,7 +335,7 @@ fan-out of work.
 
     //
     const willPause = fracture.enqueue('a')
-    willPause.number = 7
+    willPause.value.number = 7
     //
 
     // Pause immediately. We will get a pause object with an `entries`
@@ -339,7 +344,7 @@ fan-out of work.
 
     //
     const pause = await fracture.pause('a')
-    okay(pause.entries[0], { entered: false, number: 7 }, 'first pause entry')
+    okay(pause.entries[0], { entered: false, number: 7 }, 'first pause work')
     //
 
     //
@@ -348,12 +353,12 @@ fan-out of work.
     // progress. We are not blocking the queue with our pause.
 
     //
-    const unblocked = fracture.enqueue('b')
+    const unblocked = fracture.enqueue('b').value
     await new Promise(resolve => setImmediate(resolve))
     okay(unblocked.entered, 'pausing does not block the queue')
     //
 
-    // We now resume our paused entry.
+    // We now resume our paused work.
 
     //
     pause.resume()
@@ -363,13 +368,13 @@ fan-out of work.
     // was completed.
     await fracture.destructible.destroy().promise
 
-    okay(willPause.entered, 'paused work was resumed')
+    okay(willPause.value.entered, 'paused work was resumed')
 }
 ```
 
 ```javascript
 //{ "unblock": true, "name": "test" }
-{
+if (false) {
     function latch () {
         let capture
         return { promise: new Promise(resolve => capture = { resolve }), ...capture }
@@ -386,7 +391,7 @@ fan-out of work.
     const turnstile = new Turnstile(parallel.durable('turnstile'), { strands: 2 })
     const fracture = new Fracture(parallel.durable('fracture'), {
         turnstile: turnstile,
-        entry: () => ({
+        value: () => ({
             entered: latch(), block: null, work: 0
         }),
         worker: async ({ key, value }) => {
@@ -435,7 +440,7 @@ Deadlock can also be resolved by the caller pausing itself.
 
 ```javascript
 //{ "unblock": true, "name": "test" }
-{
+if (false) {
     const fracture = new Fracture(destructible.durable('fracture'), {
         turnstile: turnstile,
         entry: () => ({

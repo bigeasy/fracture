@@ -42,66 +42,60 @@ const PAUSED = Symbol('PAUSED')
 const CREATED = Symbol('CREATED')
 const WORKING = Symbol('WORKING')
 const WAITING = Symbol('WAITING')
+const ERRORED = Symbol('ERRORED')
 
 class Fracture {
-    // When you implement a function that uses fracture you should either return
-    // the enqueue future or accept a future set and add enqueue futures to it.
-    // These signatures will let the caller know that they should use `displace`
-    // to invoke the function or resolve the future set if they are calling from
-    // within a Fracture worker.
-    static Future = class extends Future {}
+    //
 
-    static FutureSet = class {
-        constructor () {
-            this._set = new Set
+    // All invocations of enqueue require this stack, so any function that uses
+    // enqueue also requires an instance of this stack. This clearly identifies
+    // Fracture enabled functions in the code.
+
+    //
+    static Stack = class {
+        constructor (fracture = { turnstile: null }, queue = null, key = null) {
+            this._fracture = fracture
+            this._queue = queue
+            this._awaiting = false
+            this._callers = []
+            this._key = key
         }
 
-        get size () {
-            return this._set.size
-        }
-
-        add (future) {
-            this._set.add(future)
-        }
-
-        prune () {
-            for (const future of this._set) {
-                if (future.fulfilled) {
-                    this._set.delete(future)
-                } else {
-                    break
-                }
+        // TODO So it is going to be bad if we displace into our own fracture
+        // using the same key, so we should assert that this is not the case.
+        // Would need a `canDisplace` function, would need to check that it is
+        // not the same key and fracture.
+        //
+        // Probably... If displaced we do not have to descend.
+        _displace (displacedBy = this) {
+            if (displacedBy !== this && displacedBy._fracture.turnstile === this._fracture.turnstile && this._awaiting && ! this._queue.displaced) {
+                displacedBy._queue.displacements.push(this)
+                this._queue.displaced = true
+                this._queue.blocks.push(new Future)
+                this._queue.blocks[0].resolve()
             }
-        }
-
-        async join () {
-            for (const future of this._set) {
-                await future.promise
-                this._set.delete(future)
+            for (const caller of this._callers) {
+                caller._displace(displacedBy)
             }
         }
     }
     //
 
-    // To be used as a default argument for functions that accept a future set
-    // when the caller doesn't intend to await the resolution of the futures in
-    // the set.
-    static NULL_FUTURE_SET = new (class extends Fracture.FutureSet {
-        size = 0
-        add () {}
-        prune () {}
-        join() {}
-    })
+    // Stack constructor function is slightly less verbose than calling the
+    // Stack constructor.
 
+    //
+    static stack () {
+        return new Fracture.Stack
+    }
+
+    //
     static Pause = class {
         constructor (fracture, key, queue) {
             this.fracture = fracture
             this.key = key
             this._queue = queue
-        }
-
-        get entries () {
-            return this._queue.entries.map(entry => entry.value)
+            this.values = this._queue.entries.splice(0).map(entry => entry.value)
         }
 
         resume () {
@@ -112,9 +106,7 @@ class Fracture {
                 this.fracture._enqueue(this.key)
             } else {
                 this.fracture._vivifyer.remove(Keyify.stringify(this.key))
-                if (--this.fracture.count == 0) {
-                    this.fracture._drain.resolve()
-                }
+                this.fracture._maybeDrain()
             }
         }
     }
@@ -128,6 +120,7 @@ class Fracture {
         this.deferrable = destructible.durable($ => $(), { countdown: 1 }, 'deferrable')
 
         this._drain = Future.resolve()
+        this._instance = 0
 
         this.destructible.destruct(() => this.deferrable.decrement())
         this.deferrable.panic(() => this._drain.resolve())
@@ -156,11 +149,13 @@ class Fracture {
             } catch (error) {
                 for (const key in this._vivifyer.map) {
                     const queue = this._vivifyer.map[key]
-                    for (const entry of queue.working.concat(queue.displacements.concat(queue.entries))) {
+                    for (const entry of queue.working) {
                         entry.future.reject(error)
                     }
                     this.count--
-                    this._vivifyer.remove(key)
+                    if (queue.entries.length == 0) {
+                        this._vivifyer.remove(key)
+                    }
                 }
             }
             this._drain.resolve()
@@ -178,6 +173,7 @@ class Fracture {
             return {
                 state: CREATED,
                 entry: Turnstile.NULL_ENTRY,
+                displaced: false,
                 displacements: [],
                 blocks: [],
                 pauses: [],
@@ -211,114 +207,116 @@ class Fracture {
         return new Fracture.Pause(this, key, queue)
     }
 
-    enqueue (key) {
+    enqueue (stack, key, setter = () => {}) {
+        assert(stack instanceof Fracture.Stack)
         this.deferrable.operational()
         const queue = this._get(key)
-        if (queue.state == CREATED && queue.displacements.length == 0) {
+        // TODO Throw error here to prevent shutdown ..... throw Error
+        if (queue.state == CREATED && ! queue.displaced) {
+            queue.state = WAITING
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
-            queue.entries.push({ future: new Fracture.Future, value: (this._value)(key) })
+            queue.entries.push({ future: new Future, value: (this._value)(key), stack: new Fracture.Stack(this, queue, key) })
         }
-        return queue.entries[queue.entries.length - 1]
+        const entry = queue.entries[queue.entries.length - 1]
+        entry.stack._callers.push(stack)
+        setter(entry.value)
+        entry.stack._displace()
+        return {
+            then: (resolve, reject) => {
+                entry.stack._awaiting = true
+                entry.stack._displace()
+                entry.future.promise.then(resolve, reject)
+            }
+        }
     }
 
     _enqueue (key) {
         const queue = this._get(key)
         queue.state = WAITING
         queue.entry = this.turnstile.enter({}, async entry => {
+            const queue = this._get(key)
+            if (queue.state == CREATED) {
+                this._vivifyer.remove(key)
+                return
+            }
+            assert(queue.state == WAITING)
+            queue.state = WORKING
             queue.enqueued = false
-            if (queue.state == WAITING) {
-                queue.state = WORKING
-
-                if (queue.displacements.length != 0) {
-                    const { capture, future } = queue.displacements.shift()
-                    future.resolve(capture.promise)
-                } else if (this._destructible.destroyed) {
-                    queue.blocks.push(Future.resolve())
-                    try {
-                        this._destructible.operational()
-                    } catch (error) {
-                        const entry = queue.entries.shift()
-                        ; (this._cancel)({ key, value: entry.value })
-                        entry.future.reject(error)
-                    }
-                } else {
-                    const work = queue.entries.shift()
+            if (queue.displaced) {
+                queue.displaced = false
+                queue.blocks[0].resolve()
+            } else if (this._destructible.destroyed) {
+                queue.blocks.push(Future.resolve())
+                try {
+                    this._destructible.operational()
+                } catch (error) {
+                    const entry = queue.entries.shift()
+                    ; (this._cancel)({ key, value: entry.value })
+                    entry.future.reject(error)
+                }
+            } else {
+                const work = queue.entries.shift()
+                // throw new Error // try it
+                let resolved = false
+                const block = new Future
+                queue.blocks.push(block)
+                if (work != null) {
                     queue.working.push(work)
-                    const displace = promise => {
-                        const future = new Future
-                        const capture = Future.capture(this._destructible.destructive($ => $(), 'displace', async () => {
-                            if (typeof promise == 'function') {
-                                return promise()
-                            }
-                            return promise
-                        }), () => {
-                            try {
-                                this._enqueue(key)
-                            } catch (error) {
-                                future.reject(error)
-                            }
-                        })
-                        queue.displacements.push({ capture, future })
-                        // `displace` might be called a couple times before we come back
-                        // around in the queue where blocks are shifted so we scan for the
-                        // first unfulfilled block and resolve that one.
-                        queue.blocks.push(new Future)
-                        for (const block of queue.blocks) {
-                            if (! block.fulfilled) {
-                                block.resolve()
-                                break
-                            }
-                        }
-                        return future.promise
-                    }
-                    queue.blocks.push(new Future)
-                    this._destructible.destructive($ => $(), 'worker', (this._worker)({
+                    // TODO Use then? Oh, no. No error. Oh, wait. Sub-destructible.
+                    this._destructible.ephemeral(`worker.${this._instance++}`, (this._worker)({
                         ...entry,
                         key: key,
                         value: work.value,
-                        displace: displace,
+                        stack: work.stack,
                         pause: key => this._pause(key)
-                    })).then((...vargs) => {
+                    }), ERRORED).then(result => {
                         queue.working.shift()
-                        work.future.resolve.apply(work.future, vargs)
-                        queue.blocks.shift().resolve()
-                    }, error => {
-                        queue.working.shift()
-                        try {
-                            this._destructible.operational()
-                        } catch (error) {
-                            work.future.reject(error)
+                        if (result === ERRORED) {
+                            try {
+                                this._destructible.operational()
+                            } catch (error) {
+                                work.future.reject(error)
+                            }
+                        } else {
+                            work.future.resolve(result)
                         }
-                        // There can only be one block remaining.
-                        queue.blocks[0].resolve()
+                        block.resolve()
                     })
                 }
+            }
 
-                // Await a block then shift it. An inversion of the scram array
-                // in Destructible where the resolving side shifts.
-                await queue.blocks[0].promise
-                queue.blocks.shift()
+            // Await a block then shift it. An inversion of the scram array in
+            // Destructible where the resolving side shifts.
+            await queue.blocks[0].promise
+            queue.blocks.shift()
 
-                if (queue.displacements.length != 0) {
-                } else if (queue.pauses.length != 0) {
-                    try {
-                        this._destructible.operational()
-                        queue.pauses.shift().resolve()
-                    } catch (error) {
-                        queue.pauses.shift().reject(error)
-                    }
+            if (! queue.displaced) {
+                for (const stack of queue.displacements) {
+                    debugger
+                    stack._fracture._enqueue(stack._key)
+                }
+                if (queue.pauses.length != 0) {
+                    // When we resolve the pause the promise will resolve in the worker
+                    // function that is within the Turnstile. Even if the Turnstile is
+                    // destoryed it will finish running a function in an surving strand
+                    // so we do not have to check for operational.
+                    queue.pauses.shift().resolve()
                 } else if (queue.entries.length != 0) {
                     this._enqueue(key)
                 } else {
                     this._vivifyer.remove(Keyify.stringify(key))
-                    if (--this.count == 0) {
-                        this._drain.resolve()
-                    }
+                    this._maybeDrain()
                 }
             }
         })
+    }
+
+    _maybeDrain () {
+        if (--this.count == 0) {
+            this._drain.resolve()
+        }
     }
 
     drain () {
