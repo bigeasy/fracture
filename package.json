@@ -1,6 +1,6 @@
 {
     "name":                 "fracture",
-    "version":              "0.3.0-alpha.55",
+    "version":              "0.3.0-alpha.56",
     "description":
 
       "A error-first callback work queue that splits work on a hashed key.",
