@@ -74,12 +74,12 @@ class Fracture {
                 displacedBy._fracture.turnstile === this._fracture.turnstile &&
                 this._awaiting &&
                 ! this._queue.displaced &&
-                ! this._queue.state != DESTROYED
+                this._queue.state != DESTROYED
             ) {
                 displacedBy._queue.displacements.push(this)
                 this._queue.displaced = true
                 this._queue.blocks.push(new Future)
-                this._queue.blocks[0].resolve()
+                Fracture._blockAdvance(this._queue)
             }
             for (const caller of this._callers) {
                 caller._displace(displacedBy)
@@ -111,7 +111,9 @@ class Fracture {
 
         resume () {
             this.fracture._destructible.operational()
-            if (this._queue.pauses.length != 0) {
+            if (this._queue.displaced) {
+                // TODO Probably cannot be reached. Think about it.
+            } else if (this._queue.pauses.length != 0) {
                 this._queue.pauses.shift().resolve()
             } else if (this._queue.entries.length != 0) {
                 this.fracture._enqueue(this.key)
@@ -223,8 +225,7 @@ class Fracture {
         this.deferrable.operational()
         const queue = this._get(key)
         // TODO Throw error here to prevent shutdown ..... throw Error
-        if (queue.state == CREATED && ! queue.displaced) {
-            queue.state = WAITING
+        if (queue.state == CREATED) {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
@@ -245,6 +246,17 @@ class Fracture {
         }
     }
 
+    // It works. You have to flip any one switch and the get flipped in the
+    // order of the array so go find one and flip it.
+    static _blockAdvance (queue) {
+        for (const future of queue.blocks) {
+            if (! future.fulfilled) {
+                future.resolve()
+                break
+            }
+        }
+    }
+
     _enqueue (key) {
         const queue = this._get(key)
         queue.state = WAITING
@@ -259,7 +271,6 @@ class Fracture {
             queue.enqueued = false
             if (queue.displaced) {
                 queue.displaced = false
-                queue.blocks[0].resolve()
             } else if (this._destructible.destroyed) {
                 queue.blocks.push(Future.resolve())
                 try {
@@ -273,8 +284,7 @@ class Fracture {
                 const work = queue.entries.shift()
                 // throw new Error // try it
                 let resolved = false
-                const block = new Future
-                queue.blocks.push(block)
+                queue.blocks.push(new Future)
                 if (work != null) {
                     queue.working.push(work)
                     // TODO Use then? Oh, no. No error. Oh, wait. Sub-destructible.
@@ -295,7 +305,7 @@ class Fracture {
                         } else {
                             work.future.resolve(result)
                         }
-                        block.resolve()
+                        Fracture._blockAdvance(queue)
                     })
                 }
             }
@@ -306,7 +316,7 @@ class Fracture {
             queue.blocks.shift()
 
             if (! queue.displaced) {
-                for (const stack of queue.displacements) {
+                for (const stack of queue.displacements.splice(0)) {
                     stack._fracture._enqueue(stack._key)
                 }
                 if (queue.pauses.length != 0) {
