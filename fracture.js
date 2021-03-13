@@ -95,7 +95,7 @@ class Fracture {
             this.fracture = fracture
             this.key = key
             this._queue = queue
-            this.values = this._queue.entries.splice(0).map(entry => entry.value)
+            this.values = this._queue.entries.map(entry => entry.value)
         }
 
         resume () {

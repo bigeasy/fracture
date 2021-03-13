@@ -1,6 +1,6 @@
 // Not able to get all the edge cases in the `readme.t.js` and striving for them
 // is making the `readme.t.js` less in instructive.
-require('proof')(8, async okay => {
+require('proof')(9, async okay => {
     const assert = require('assert')
 
     const rescue = require('rescue')
@@ -106,17 +106,23 @@ require('proof')(8, async okay => {
 
         destructible.ephemeral('test', async () => {
             const blocks = { b: new Future, c: new Future }
-            const expected = { b: [[ 1 ]], c: [] }
+            const expected = { b: [[ 1 ]], c: [[]] }
             const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
                 turnstile: turnstile,
                 value: () => [],
                 worker: async ({ key, value, pause }) => {
-                    assert(key != 'a')
-                    await blocks[key].promise
-                    const paused = await pause('a')
-                    okay(paused.values, expected[key], `expected values for ${key}`)
-                    await new Promise(resolve => setTimeout(resolve, 50))
-                    paused.resume()
+                    if (key == 'a') {
+                        okay(value, [], 'a was cleared')
+                    } else {
+                        await blocks[key].promise
+                        const paused = await pause('a')
+                        okay(paused.values, expected[key], `expected values for ${key}`)
+                        if (key == 'b') {
+                            paused.values[0].splice(0)
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 50))
+                        paused.resume()
+                    }
                 }
             })
 
