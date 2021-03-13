@@ -225,8 +225,10 @@ class Fracture {
         entry.stack._displace()
         return {
             then: (resolve, reject) => {
-                entry.stack._awaiting = true
-                entry.stack._displace()
+                if (! entry.future.fulfilled) {
+                    entry.stack._awaiting = true
+                    entry.stack._displace()
+                }
                 entry.future.promise.then(resolve, reject)
             }
         }
