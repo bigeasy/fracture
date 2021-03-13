@@ -38,6 +38,7 @@ const Destructible = require('destructible')
 const Turnstile = require('turnstile')
 const Future = require('perhaps')
 
+const DESTROYED = Symbol('DESTROYED')
 const PAUSED = Symbol('PAUSED')
 const CREATED = Symbol('CREATED')
 const WORKING = Symbol('WORKING')
@@ -53,7 +54,7 @@ class Fracture {
 
     //
     static Stack = class {
-        constructor (fracture = { turnstile: null }, queue = null, key = null) {
+        constructor (fracture = { turnstile: null }, queue = {}, key = null) {
             this._fracture = fracture
             this._queue = queue
             this._awaiting = false
@@ -68,7 +69,13 @@ class Fracture {
         //
         // Probably... If displaced we do not have to descend.
         _displace (displacedBy = this) {
-            if (displacedBy !== this && displacedBy._fracture.turnstile === this._fracture.turnstile && this._awaiting && ! this._queue.displaced) {
+            if (
+                displacedBy !== this &&
+                displacedBy._fracture.turnstile === this._fracture.turnstile &&
+                this._awaiting &&
+                ! this._queue.displaced &&
+                ! this._queue.state != DESTROYED
+            ) {
                 displacedBy._queue.displacements.push(this)
                 this._queue.displaced = true
                 this._queue.blocks.push(new Future)
@@ -77,6 +84,10 @@ class Fracture {
             for (const caller of this._callers) {
                 caller._displace(displacedBy)
             }
+        }
+
+        _display () {
+            return { key: this._key, callers: this._callers.map(caller => caller._display()) }
         }
     }
     //
@@ -226,7 +237,7 @@ class Fracture {
         return {
             then: (resolve, reject) => {
                 if (! entry.future.fulfilled) {
-                    entry.stack._awaiting = true
+                    stack._awaiting = true
                     entry.stack._displace()
                 }
                 entry.future.promise.then(resolve, reject)
@@ -296,7 +307,6 @@ class Fracture {
 
             if (! queue.displaced) {
                 for (const stack of queue.displacements) {
-                    debugger
                     stack._fracture._enqueue(stack._key)
                 }
                 if (queue.pauses.length != 0) {
@@ -308,6 +318,7 @@ class Fracture {
                 } else if (queue.entries.length != 0) {
                     this._enqueue(key)
                 } else {
+                    queue.state = DESTROYED
                     this._vivifyer.remove(Keyify.stringify(key))
                     this._maybeDrain()
                 }
