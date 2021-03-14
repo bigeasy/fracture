@@ -220,6 +220,15 @@ class Fracture {
         return new Fracture.Pause(this, key, queue)
     }
 
+    // TODO We could create the thenable once, that way in something like split,
+    // instead of creating an array with an entry for each write, we could use
+    // `Set` and we'd only wait for the batched write to await. This might be
+    // enough of a performance improvement that we don't need to expose the
+    // `fulfilled` property, but if we do, why not make `then` a function of
+    // `Future` and override it in a subclass? This Thenable shoulud be a
+    // separate class.
+
+    //
     enqueue (stack, key, setter = () => {}) {
         assert(stack instanceof Fracture.Stack)
         this.deferrable.operational()
@@ -234,10 +243,42 @@ class Fracture {
         const entry = queue.entries[queue.entries.length - 1]
         entry.stack._callers.push(stack)
         setter(entry.value)
+        // Considering a case where we invoke a enqueue with a stack, but awiat
+        // only at the very end. A nested call invoked enqueue with a stack, but
+        // it does not await at all. If so, shouldn't it simply submit a fresh
+        // stack? Yes, because it is not going block on the completion.
+
+        // What happens if the turnstiles don't match up. A awaits B but B has a
+        // different turnstile. B awaits C and C has the same turnstile as A. C
+        // needs to displace A. This would be covered by this call.
         entry.stack._displace()
+
+        // Continuing. A awaits B but B has a different turnstile. B calls C
+        // many times and then awaits many thenables separately. Now we have to
+        // think about the queues. C would have many values to process, but only
+        // one queue entry, that queue entry could have multiple value entries,
+        // but we resume after the first value entry is processed. To resume is
+        // to place it back in the queue, possibly after A and that would create
+        // deadlock, so we probably need a set of values, or else we only resume
+        // when the queue is empty.
+
+        // Modify that. B calls C many times and awaits many thenables, so A is
+        // displaced until all the values are consumed. Then it is enqueued. B
+        // calls C many times and awaits many thenables again, but now our
+        // boolean switch has been flipped, is it enough to flip it back so that
+        // we can trigger it again?
+
+        // If this be the case, then we can do this per value set.
+
+        // What happens if we add values to C from a separate stack path? Those
+        // values would need to be processed, but they would not trigger any
+        // displacement for A.
+
+        // Isn't the `_awaiting` flag just a duplicate of
+        // `entry.future.fulfilled`? Consider the race conditions.
         return {
             then: (resolve, reject) => {
-                if (! entry.future.fulfilled) {
+                if (! entry.future.fulfilled && ! stack._awaiting) {
                     stack._awaiting = true
                     entry.stack._displace()
                 }
