@@ -111,9 +111,8 @@ class Fracture {
 
         resume () {
             this.fracture._destructible.operational()
-            if (this._queue.displaced) {
-                // TODO Probably cannot be reached. Think about it.
-            } else if (this._queue.pauses.length != 0) {
+            assert(! this._queue.displaced)
+            if (this._queue.pauses.length != 0) {
                 this._queue.pauses.shift().resolve()
             } else if (this._queue.entries.length != 0) {
                 this.fracture._enqueue(this.key)
