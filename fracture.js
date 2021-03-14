@@ -238,7 +238,21 @@ class Fracture {
             this._enqueue(key)
         }
         if (queue.entries.length == 0) {
-            queue.entries.push({ future: new Future, value: (this._value)(key), stack: new Fracture.Stack(this, queue, key) })
+            const entry = {
+                future: new Future,
+                value: (this._value)(key),
+                stack: new Fracture.Stack(this, queue, key),
+                thenable: {
+                    then: (resolve, reject) => {
+                        if (! entry.future.fulfilled && ! stack._awaiting) {
+                            stack._awaiting = true
+                            entry.stack._displace()
+                        }
+                        entry.future.promise.then(resolve, reject)
+                    }
+                }
+            }
+            queue.entries.push(entry)
         }
         const entry = queue.entries[queue.entries.length - 1]
         entry.stack._callers.push(stack)
@@ -276,15 +290,7 @@ class Fracture {
 
         // Isn't the `_awaiting` flag just a duplicate of
         // `entry.future.fulfilled`? Consider the race conditions.
-        return {
-            then: (resolve, reject) => {
-                if (! entry.future.fulfilled && ! stack._awaiting) {
-                    stack._awaiting = true
-                    entry.stack._displace()
-                }
-                entry.future.promise.then(resolve, reject)
-            }
-        }
+        return entry.thenable
     }
 
     // It works. You have to flip any one switch and the get flipped in the
@@ -311,6 +317,7 @@ class Fracture {
             queue.state = WORKING
             queue.enqueued = false
             if (queue.displaced) {
+                console.log('RESUMED', key)
                 queue.displaced = false
             } else if (this._destructible.destroyed) {
                 queue.blocks.push(Future.resolve())

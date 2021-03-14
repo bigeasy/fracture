@@ -1,6 +1,6 @@
 // Not able to get all the edge cases in the `readme.t.js` and striving for them
 // is making the `readme.t.js` less in instructive.
-require('proof')(9, async okay => {
+require('proof')(11, async okay => {
     const assert = require('assert')
 
     const rescue = require('rescue')
@@ -92,6 +92,82 @@ require('proof')(9, async okay => {
 
             const result = await fracture.enqueue(Fracture.stack(), 'a', value => value.push(1))
             okay(result, 2, 'displaced')
+
+            destructible.destroy()
+        })
+
+        await destructible.promise
+    }
+
+    // Displacable mixed turnstiles.
+    {
+        const destructible = new Destructible($ => $(), 'fracture')
+        const turnstiles = {
+            first: new Turnstile(destructible.durable({ isolated: true }, 'turnstile.1')),
+            second: new Turnstile(destructible.durable({ isolated: true }, 'turnstile.2'))
+        }
+
+        const test = []
+        destructible.ephemeral('test', async () => {
+            const fractures = {
+                first: new Fracture(destructible.durable($ => $(), 'fracture'), {
+                    turnstile: turnstiles.first,
+                    value: () => [],
+                    worker: async ({ key, value, stack }) => {
+                        if (key == 'a') {
+                            const result = []
+                            for (const number of value) {
+                                result.push(await fractures.second.enqueue(stack, 'b', _value => _value.push(number)))
+                            }
+                            return result
+                        } else {
+                            return value
+                        }
+                    }
+                }),
+                second: new Fracture(destructible.durable($ => $(), 'fracture'), {
+                    turnstile: turnstiles.second,
+                    value: () => [],
+                    worker: async ({ key, value, stack }) => {
+                        return await fractures.first.enqueue(stack, 'c', _value => _value.push.apply(_value, value))
+                    }
+                })
+            }
+
+            const result = await fractures.first.enqueue(Fracture.stack(), 'a', value => value.push(1, 2, 3))
+            okay(result, [ [ 1 ], [ 2 ], [ 3 ] ], 'tricky displacement')
+
+            destructible.destroy()
+        })
+
+        await destructible.promise
+    }
+
+    // Thenable set.
+    {
+        const destructible = new Destructible($ => $(), 'fracture')
+        const turnstile = new Turnstile(destructible.durable('turnstile'))
+
+        const errors = []
+
+        destructible.ephemeral('test', async () => {
+            const fracture = new Fracture(destructible.durable($ => $(), 'fracture'), {
+                turnstile: turnstile,
+                value: () => [],
+                worker: async ({ key, value, pause }) => {
+                    return key
+                }
+            })
+
+            const promises = new Set
+            promises.add(fracture.enqueue(Fracture.stack(), 'a'))
+            promises.add(fracture.enqueue(Fracture.stack(), 'a'))
+            promises.add(fracture.enqueue(Fracture.stack(), 'a'))
+
+            okay(promises.size, 1, 'same thenable')
+            for (const promise of promises) {
+                await promise
+            }
 
             destructible.destroy()
         })
