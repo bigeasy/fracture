@@ -308,17 +308,11 @@ class Fracture {
         const queue = this._get(key)
         queue.state = WAITING
         queue.entry = this.turnstile.enter({}, async entry => {
-            const queue = this._get(key)
-            if (queue.state == CREATED) {
-                this._vivifyer.remove(key)
-                return
-            }
             assert(queue.state == WAITING)
             queue.state = WORKING
             queue.enqueued = false
-            if (queue.displaced) {
-                console.log('RESUMED', key)
-                queue.displaced = false
+            if (queue.blocks.length != 0) {
+                // We are a resumed displacement.
             } else if (this._destructible.destroyed) {
                 queue.blocks.push(Future.resolve())
                 try {
@@ -331,31 +325,27 @@ class Fracture {
             } else {
                 const work = queue.entries.shift()
                 // throw new Error // try it
-                let resolved = false
                 queue.blocks.push(new Future)
-                if (work != null) {
-                    queue.working.push(work)
-                    // TODO Use then? Oh, no. No error. Oh, wait. Sub-destructible.
-                    this._destructible.ephemeral(`worker.${this._instance++}`, (this._worker)({
-                        ...entry,
-                        key: key,
-                        value: work.value,
-                        stack: work.stack,
-                        pause: key => this._pause(key)
-                    }), ERRORED).then(result => {
-                        queue.working.shift()
-                        if (result === ERRORED) {
-                            try {
-                                this._destructible.operational()
-                            } catch (error) {
-                                work.future.reject(error)
-                            }
-                        } else {
-                            work.future.resolve(result)
+                queue.working.push(work)
+                this._destructible.ephemeral(`worker.${this._instance++}`, (this._worker)({
+                    ...entry,
+                    key: key,
+                    value: work.value,
+                    stack: work.stack,
+                    pause: key => this._pause(key)
+                }), ERRORED).then(result => {
+                    queue.working.shift()
+                    if (result === ERRORED) {
+                        try {
+                            this._destructible.operational()
+                        } catch (error) {
+                            work.future.reject(error)
                         }
-                        Fracture._blockAdvance(queue)
-                    })
-                }
+                    } else {
+                        work.future.resolve(result)
+                    }
+                    Fracture._blockAdvance(queue)
+                })
             }
 
             // Await a block then shift it. An inversion of the scram array in
@@ -365,6 +355,7 @@ class Fracture {
 
             if (! queue.displaced) {
                 for (const stack of queue.displacements.splice(0)) {
+                    stack._queue.displaced = false
                     stack._fracture._enqueue(stack._key)
                 }
                 if (queue.pauses.length != 0) {
