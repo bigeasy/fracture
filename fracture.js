@@ -85,10 +85,6 @@ class Fracture {
                 caller._displace(displacedBy)
             }
         }
-
-        _display () {
-            return { key: this._key, callers: this._callers.map(caller => caller._display()) }
-        }
     }
     //
 
