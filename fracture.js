@@ -74,7 +74,7 @@ class Fracture {
                 displacedBy._fracture.turnstile === this._fracture.turnstile &&
                 this._awaiting &&
                 ! this._queue.displaced &&
-                this._queue.state != DESTROYED
+                this._queue.state !== DESTROYED
             ) {
                 displacedBy._queue.displacements.push(this)
                 this._queue.displaced = true
@@ -128,7 +128,6 @@ class Fracture {
         this.deferrable = destructible.durable($ => $(), { countdown: 1 }, 'deferrable')
 
         this._drain = Future.resolve()
-        this._instance = 0
 
         this.destructible.destruct(() => this.deferrable.decrement())
         this.deferrable.panic(() => this._drain.resolve())
@@ -223,6 +222,7 @@ class Fracture {
     // `Future` and override it in a subclass? This Thenable shoulud be a
     // separate class.
 
+    static instance = 0
     //
     enqueue (stack, key, setter = () => {}) {
         assert(stack instanceof Fracture.Stack)
@@ -237,15 +237,7 @@ class Fracture {
                 future: new Future,
                 value: (this._value)(key),
                 stack: new Fracture.Stack(this, queue, key),
-                thenable: {
-                    then: (resolve, reject) => {
-                        if (! entry.future.fulfilled && ! stack._awaiting) {
-                            stack._awaiting = true
-                            entry.stack._displace()
-                        }
-                        entry.future.promise.then(resolve, reject)
-                    }
-                }
+                thenables: new Map
             }
             queue.entries.push(entry)
         }
@@ -261,7 +253,6 @@ class Fracture {
         // different turnstile. B awaits C and C has the same turnstile as A. C
         // needs to displace A. This would be covered by this call.
         entry.stack._displace()
-
         // Continuing. A awaits B but B has a different turnstile. B calls C
         // many times and then awaits many thenables separately. Now we have to
         // think about the queues. C would have many values to process, but only
@@ -285,7 +276,21 @@ class Fracture {
 
         // Isn't the `_awaiting` flag just a duplicate of
         // `entry.future.fulfilled`? Consider the race conditions.
-        return entry.thenable
+        const thenable = entry.thenables.get(stack)
+        if (thenable == null) {
+            const thenable = {
+                then: (resolve, reject) => {
+                    if (! entry.future.fulfilled && ! stack._awaiting) {
+                        stack._awaiting = true
+                        entry.stack._displace()
+                    }
+                    entry.future.promise.then(resolve, reject)
+                }
+            }
+            entry.thenables.set(stack, thenable)
+            return thenable
+        }
+        return thenable
     }
 
     // It works. You have to flip any one switch and the get flipped in the
@@ -322,7 +327,7 @@ class Fracture {
                 // throw new Error // try it
                 queue.blocks.push(new Future)
                 queue.working.push(work)
-                this._destructible.ephemeral(`worker.${this._instance++}`, (this._worker)({
+                this._destructible.ephemeral('worker', (this._worker)({
                     ...entry,
                     key: key,
                     value: work.value,
@@ -350,6 +355,7 @@ class Fracture {
 
             if (! queue.displaced) {
                 for (const stack of queue.displacements.splice(0)) {
+                    stack._awaiting = false
                     stack._queue.displaced = false
                     stack._fracture._enqueue(stack._key)
                 }

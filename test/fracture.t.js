@@ -160,9 +160,10 @@ require('proof')(11, async okay => {
             })
 
             const promises = new Set
-            promises.add(fracture.enqueue(Fracture.stack(), 'a'))
-            promises.add(fracture.enqueue(Fracture.stack(), 'a'))
-            promises.add(fracture.enqueue(Fracture.stack(), 'a'))
+            const stack = Fracture.stack()
+            promises.add(fracture.enqueue(stack, 'a'))
+            promises.add(fracture.enqueue(stack, 'a'))
+            promises.add(fracture.enqueue(stack, 'a'))
 
             okay(promises.size, 1, 'same thenable')
             for (const promise of promises) {
