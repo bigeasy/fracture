@@ -333,17 +333,13 @@ class Fracture {
                     value: work.value,
                     stack: work.stack,
                     pause: key => this._pause(key)
-                }), ERRORED).then(result => {
+                })).promise.then(result => {
                     queue.working.shift()
-                    if (result === ERRORED) {
-                        try {
-                            this._destructible.operational()
-                        } catch (error) {
-                            work.future.reject(error)
-                        }
-                    } else {
-                        work.future.resolve(result)
-                    }
+                    work.future.resolve(result)
+                    Fracture._blockAdvance(queue)
+                }, error => {
+                    queue.working.shift()
+                    work.future.reject(error)
                     Fracture._blockAdvance(queue)
                 })
             }
