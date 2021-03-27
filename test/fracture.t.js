@@ -5,7 +5,7 @@ require('proof')(11, async okay => {
 
     const rescue = require('rescue')
 
-    const Future = require('perhaps')
+    const { Future } = require('perhaps')
     const Turnstile = require('turnstile')
     const Destructible = require('destructible')
 

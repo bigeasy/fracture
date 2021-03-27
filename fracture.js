@@ -36,7 +36,7 @@ const Keyify = require('keyify')
 const Vivifyer = require('vivifyer')
 const Destructible = require('destructible')
 const Turnstile = require('turnstile')
-const Future = require('perhaps')
+const { Future } = require('perhaps')
 
 const DESTROYED = Symbol('DESTROYED')
 const PAUSED = Symbol('PAUSED')
