@@ -56,7 +56,7 @@ require('proof')(4, async okay => {
 
     Fracture divides work up by keys. When you enqueue work into Fracture it will
     return an entry constructed by your entry constructor. This is the pending
-    entry, the one you add your work to. It is construced when you call `enqueue`
+    entry, the one you add your work to. It is constructed when you call `enqueue`
     and there is no entry available for the key. Until the entry is consumed by the
     worker function `enqeue` will return the same entry. When the entry is consumed
     by the worker function `enqueue` will create a new entry.
@@ -114,7 +114,7 @@ require('proof')(4, async okay => {
 
     Deadlock occurs when an entry in the queue depends on a result of an entry in
     the queue that precedes it and there are not enough strands available for the
-    proceding entry to consume the proceding entry.
+    proceeding entry to consume the proceeding entry.
 
     Race conditions are more difficult to describe and are Node.js specific. More on
     those later.
