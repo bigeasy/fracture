@@ -219,7 +219,7 @@ class Fracture {
     // `Set` and we'd only wait for the batched write to await. This might be
     // enough of a performance improvement that we don't need to expose the
     // `fulfilled` property, but if we do, why not make `then` a function of
-    // `Future` and override it in a subclass? This Thenable shoulud be a
+    // `Future` and override it in a subclass? This Thenable should be a
     // separate class.
 
     static instance = 0
@@ -244,7 +244,7 @@ class Fracture {
         const entry = queue.entries[queue.entries.length - 1]
         entry.stack._callers.push(stack)
         setter(entry.value)
-        // Considering a case where we invoke a enqueue with a stack, but awiat
+        // Considering a case where we invoke a enqueue with a stack, but await
         // only at the very end. A nested call invoked enqueue with a stack, but
         // it does not await at all. If so, shouldn't it simply submit a fresh
         // stack? Yes, because it is not going block on the completion.
@@ -358,8 +358,8 @@ class Fracture {
                 if (queue.pauses.length != 0) {
                     // When we resolve the pause the promise will resolve in the worker
                     // function that is within the Turnstile. Even if the Turnstile is
-                    // destoryed it will finish running a function in an surving strand
-                    // so we do not have to check for operational.
+                    // destroyed it will finish running a function in an surviving
+                    // strand so we do not have to check for operational.
                     queue.pauses.shift().resolve()
                 } else if (queue.entries.length != 0) {
                     this._enqueue(key)
