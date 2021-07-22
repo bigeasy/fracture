@@ -23,7 +23,7 @@
     {
                             "hash.fnv":                     "^1.0.8",
                             "nop":                          "1.0.0",
-                            "perhaps":                      "0.0.10",
+                            "perhaps":                      "0.0.11",
                             "turnstile":                    "6.0.0-alpha.77",
                             "vivifyer":                     "^2.1.0"
     },
