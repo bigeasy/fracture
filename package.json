@@ -25,7 +25,7 @@
                             "nop":                          "1.0.0",
                             "perhaps":                      "0.0.11",
                             "turnstile":                    "6.0.0-alpha.77",
-                            "vivifyer":                     "^2.1.0"
+                            "vivifyer":                     "^3.0.0"
     },
     "devDependencies":
     {
