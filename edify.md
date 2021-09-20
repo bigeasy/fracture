@@ -26,23 +26,21 @@ unit test generally looks like this.
 ```javascript
 //{ "code": { "tests": 8 }, "text": { "tests": 4  } }
 require('proof')(%(tests)d, async okay => {
-    //{ "include": "test" }
+    //{ "include": "test", "mode": "code" }
+    //{ "include": "proof" }
 })
+```
+
+```javascript
+//{ "name": "proof", "mode": "text" }
+okay('always okay')
+okay(true, 'okay if true')
+okay(1, 1, 'okay if equal')
+okay({ value: 1 }, { value: 1 }, 'okay if deep strict equal')
 ```
 
 The `'fracture'` module exports a single `Fracture` object.
 
-
-```javascript
-//{ "name": "test", "mode": "text", "unblock": true }
-{
-    const Fracture = require('fracture')
-    okay('always okay')
-    okay(true, 'okay if true')
-    okay(1, 1, 'okay if equal')
-    okay({ value: 1 }, { value: 1 }, 'okay if deep strict equal')
-}
-```
 
 ```javascript
 //{ "name": "test", "mode": "code" }
