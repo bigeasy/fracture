@@ -14,17 +14,23 @@ An `async`/`await` work queue that groups work by key.
 | Coverage:     | https://codecov.io/gh/bigeasy/fracture        |
 | License:      | MIT                                           |
 
-```text
+
+Fracture installs from NPM.
+
+```
 //{ "mode": "text" }
 npm install fracture
 ```
 
-This `README.md` is also a unit test using the Proof unit test framework. We'll
-use the Proof `okay` function to assert out statements in the readme. A Proof
-unit test generally looks like this.
+## Living `README.md`
+
+This `README.md` is also a unit test using the
+[Proof](https://github.com/bigeasy/proof) unit test framework. We'll use the
+Proof `okay` function to assert out statements in the readme. A Proof unit test
+generally looks like this.
 
 ```javascript
-//{ "code": { "tests": 8 }, "text": { "tests": 4  } }
+//{ "code": { "tests": 69 }, "text": { "tests": 4  } }
 require('proof')(%(tests)d, async okay => {
     //{ "include": "test", "mode": "code" }
     //{ "include": "proof" }
@@ -39,12 +45,25 @@ okay(1, 1, 'okay if equal')
 okay({ value: 1 }, { value: 1 }, 'okay if deep strict equal')
 ```
 
+You can run this unit test yourself to see the output from the various
+code sections of the readme.
+
+```text
+//{ "mode": "text" }
+git clone git@github.com:bigeasy/fracture.git
+cd fracture
+npm install --no-package-lock --no-save
+node test/readme.t.js
+```
+
+## Overview
+
 The `'fracture'` module exports a single `Fracture` object.
 
 
 ```javascript
-//{ "name": "test", "mode": "code" }
-const Fracture = require('..')
+//{ "name": "test", "code": { "path": "'..'" }, "text": { "path": "'ascension'" } }
+const Fracture = require(%(path)s)
 ```
 
 Fracture depends on [Turnstile](https://github.com/bigeasy/turnstile). Turnstile
@@ -64,6 +83,13 @@ Destructible. It provides for catching and reporting errors from multiple
 concurrent `Promise`s as well as `Promise` cancellation.
 
 To use Fracture you must provide a `Destructible` and `Turnstile`.
+
+```javascript
+//{ "name": "test" }
+// Import Destructible and Turnstile.
+const Destructible = require('destructible')
+const Turnstile = require('turnstile')
+```
 
 You provide an entry constructor function. It will create a queue of your design
 entry specific to your application. You provide a worker function that will
@@ -87,10 +113,6 @@ worker function.
 ```javascript
 //{ "unblock": true, "name": "test" }
 {
-    // Import Destructible and Turnstile.
-    const Destructible = require('destructible')
-    const Turnstile = require('turnstile')
-
     // Create a Destructible and Turnstile.
     const destructible = new Destructible('fracture')
     const turnstile = new Turnstile(destructible.durable('turnstile'))
@@ -109,13 +131,13 @@ worker function.
     })
 
     // Push work into the queue for a particular key.
-    fracture.enqueue('a', entry => entry.work.push(1))
+    fracture.enqueue(Fracture.stack(), 'a', entry => entry.work.push(1))
 
     // Push more work into the queue for the same key.
-    fracture.enqueue('a', entry => entry.work.push(2))
+    fracture.enqueue(Fracture.stack(), 'a', entry => entry.work.push(2))
 
     // Push work into the queue for a different key.
-    fracture.enqueue('b', entry => entry.work.push(3))
+    fracture.enqueue(Fracture.stack(), 'b', entry => entry.work.push(3))
 
     // Destroy the destructible and wait for everything to wind down.
     await destructible.destroy().promise
@@ -181,9 +203,9 @@ Destructible, but a Fracture can end during the life of the program.
     })
 
     // Add work to `fracture`.
-    fracture.enqueue('a', entry => entry.work.push(1))
-    fracture.enqueue('a', entry => entry.work.push(2))
-    fracture.enqueue('b', entry => entry.work.push(3))
+    fracture.enqueue(Fracture.stack(), 'a', entry => entry.work.push(1))
+    fracture.enqueue(Fracture.stack(), 'a', entry => entry.work.push(2))
+    fracture.enqueue(Fracture.stack(), 'b', entry => entry.work.push(3))
 
     // Destroy the destructible and wait for everything to wind down.
     await fracture.destructible.destroy().promise
@@ -203,66 +225,70 @@ Destructible, but a Fracture can end during the life of the program.
 }
 ```
 
+## Queueing
+
+Let's create a our `Destructible` and `Turnstile`.
+
 ```
-//{ "mode": "code", "name": "test" }
-const Destructible = require('destructible')
-const Turnstile = require('turnstile')
-
-const destructible = new Destructible($ => $(), 'fracture.t')
-const turnstile = new Turnstile(destructible.durable($ => $(), 'turnstile'))
-
-await destructible.ephemeral('test', async () => {
-    //{ "include": "test" }
-
-    destructible.destroy()
-})
-
-await destructible.promise
-```
-
-We'll now pretend we declared a `destructible` and `turnstile` in our examples
-and that we're reusing them.
-
-```javascript
-//{ "unblock": true, "name": "test" }
+//{ "name": "test", "mode": "code" }
 {
-    const fracture = new Fracture(destructible.ephemeral('fracture'), {
-        turnstile: turnstile,
-        value: () => ({ work: [], entered: false }),
-        worker: async ({ value }) => {
-            value.entered = true
-            for (const timeout of value.work) {
-                await new Promise(resolve => setTimeout(resolve, timeout))
-            }
-        }
-    })
-
-    // Add some "work", which is just a timeout duration.
-    let first
-    fracture.enqueue('a', entry => {
-        entry.work.push(50)
-        first = entry
-    })
-
-    // Let's go to the Node.js event loop for a moment so our work queue can
-    // start.
-    await new Promise(resolve => setImmediate(resolve))
-
-    // Now when we enqueue we're going to get a new user object. Our current
-    // object is in the work queue. We cannot add more work to it. We held
-    // on to it just to show that a new user object has been created.
-    let second
-    fracture.enqueue('a', entry => second = entry)
-
-    okay(second !== first, 'new user object created for future work')
-    okay(first.entered, 'our first user object has entered the work queue (and could well have left it)')
-    okay(!second.entered, 'our second user object has not entered the work queue')
-
-    fracture.enqueue('a', entry => okay(entry == second, 'we continue to get the same second object until we do something asynchronous'))
-
-    await fracture.destructible.destroy().promise
+    //{ "include": "pause.test" }
 }
 ```
+
+```
+//{ "name": "pause.test" }
+const destructible = new Destructible($ => $(), 'fracture.t')
+const turnstile = new Turnstile(destructible.durable($ => $(), 'turnstile'))
+```
+
+TODO Should I rename `value` to `entry`? Didn't I already rename it from `entry`
+to `value`?
+
+We create a `Fracture` that creates a work queue entry with a `work` array and a
+flag to indicate whether the entry has entered the worker function.
+
+```javascript
+//{ "name": "pause.test" }
+const fracture = new Fracture(destructible.ephemeral('fracture'), {
+    turnstile: turnstile,
+    value: () => ({ work: [], entered: false }),
+    worker: async ({ value }) => {
+        value.entered = true
+        for (const timeout of value.work) {
+            await new Promise(resolve => setTimeout(resolve, timeout))
+        }
+    }
+})
+
+//{ "name": "pause.test" }
+// Add some "work", which is just a timeout duration.
+let first
+fracture.enqueue(Fracture.stack(), 'a', entry => {
+    entry.work.push(50)
+    first = entry
+})
+
+// Let's go to the Node.js event loop for a moment so our work queue can
+// start.
+await new Promise(resolve => setImmediate(resolve))
+
+// Now when we enqueue we're going to get a new user object. Our current
+// object is in the work queue. We cannot add more work to it. We held
+// on to it just to show that a new user object has been created.
+let second
+fracture.enqueue(Fracture.stack(), 'a', entry => second = entry)
+
+okay(second !== first, 'new user object created for future work')
+okay(first.entered, 'our first user object has entered the work queue (and could well have left it)')
+okay(!second.entered, 'our second user object has not entered the work queue')
+
+fracture.enqueue(Fracture.stack(), 'a', entry => okay(entry == second, 'we continue to get the same second object until we do something asynchronous'))
+
+await fracture.destructible.destroy().promise
+```
+
+## Pause
 
 Pause is used to pull work out of the queue. It is how we avoid deadlock.
 Sometimes work must be done across multiple keys. The keys allow us to order our
@@ -496,7 +522,7 @@ if (false) {
 
 
     //
-    {
+    if (false) {
         // When we create a Fracture we must create a `Turnstile`. To create a
         // Turnstile we must create a `Destructible`.
 
