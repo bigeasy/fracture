@@ -24,7 +24,7 @@
 // Proof `okay` function to assert out statements in the readme. A Proof unit test
 // generally looks like this.
 
-require('proof')(69, async okay => {
+require('proof')(8, async okay => {
     // ## Overview
     //
     // The `'fracture'` module exports a single `Fracture` object.
