@@ -62,7 +62,7 @@ The `'fracture'` module exports a single `Fracture` object.
 
 
 ```javascript
-//{ "name": "test", "code": { "path": "'..'" }, "text": { "path": "'ascension'" } }
+//{ "name": "test", "code": { "path": "'..'" }, "text": { "path": "'fracture'" } }
 const Fracture = require(%(path)s)
 ```
 
